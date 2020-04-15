@@ -3,6 +3,7 @@ package edu.buffalo.cse.cse486586.simpledht;
 import android.os.Bundle;
 import android.app.Activity;
 import android.text.method.ScrollingMovementMethod;
+import android.util.Log;
 import android.view.Menu;
 import android.widget.TextView;
 
@@ -17,6 +18,7 @@ public class SimpleDhtActivity extends Activity {
         tv.setMovementMethod(new ScrollingMovementMethod());
         findViewById(R.id.button3).setOnClickListener(
                 new OnTestClickListener(tv, getContentResolver()));
+        Log.i("getSMg","getMsg");
     }
 
     @Override
