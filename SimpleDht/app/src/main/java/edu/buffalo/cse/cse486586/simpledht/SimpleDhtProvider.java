@@ -7,6 +7,9 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.Formatter;
 
 import android.content.ContentProvider;
@@ -37,6 +40,7 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.TreeMap;
 
 
 // command to test
@@ -46,6 +50,9 @@ public class SimpleDhtProvider extends ContentProvider {
     Context context;
     int myPort,leftPort=0,rightPort=0;
     int count = 0;
+    int firstPort = 11108;
+    ArrayList<Integer> REMOTE_PORTS = new ArrayList<Integer>(Arrays.asList(11108,11112,11116,11120,11124));
+    ArrayList<Integer> portsSortedList = new ArrayList<Integer>();
     @Override
     public int delete(Uri uri, String selection, String[] selectionArgs) {
         // TODO Auto-generated method stub
@@ -104,6 +111,30 @@ public class SimpleDhtProvider extends ContentProvider {
     @Override
     public boolean onCreate() {
         // TODO Auto-generated method stub
+try {
+    Log.i("basic check", String.valueOf(genHash("5554").compareTo(genHash("5556")))); // 1
+    Log.i("basic check", String.valueOf(genHash("5556").compareTo(genHash("5558")))); // -47
+    Log.i("basic check", String.valueOf(genHash("5558").compareTo(genHash("5560")))); // -2
+    Log.i("basic check", String.valueOf(genHash("5560").compareTo(genHash("5562")))); // 50
+
+        HashMap<String,Integer> portsHashValue = new HashMap<String, Integer>();
+        ArrayList<String> portsHashList = new ArrayList<String>();
+
+        for(int remote_port : REMOTE_PORTS ){
+            portsHashList.add(genHash(Integer.toString(remote_port/2)));
+            portsHashValue.put(genHash(Integer.toString(remote_port/2)),remote_port);
+
+        }
+
+        Collections.sort(portsHashList);
+//        Collections.reverse(portsHashList);
+
+        for(String portHash:portsHashList){
+            Log.i("hash",Integer.toString(portsHashValue.get(portHash)));
+            Log.i("hash", String.valueOf(genHash(Integer.toString(portsHashValue.get(portHash)/2)).compareTo(genHash("5560")))); // 1
+            portsSortedList.add(portsHashValue.get(portHash));
+        }
+}catch(Exception e){}
 
         context = this.getContext();
         TelephonyManager tel = (TelephonyManager) context.getSystemService(Context.TELEPHONY_SERVICE);
@@ -130,6 +161,7 @@ public class SimpleDhtProvider extends ContentProvider {
         Log.i("port left",Integer.toString(leftPort));
         Log.i("port right",Integer.toString(rightPort));
         MatrixCursor cursor;
+
 
 //        if(!continueOrNot(selection)){
 //            Log.i("return",selection);
@@ -162,13 +194,13 @@ public class SimpleDhtProvider extends ContentProvider {
         return formatter.toString();
     }
 
-//    s1.compareTo(s2)
-//    12 if s1 < s2
-//    -16 if s1 > s2
+//     s1.compare(s2)
+//        s1<s2 -> -2
+//        s1>s2 -> +2
     public int findMatch(String msg){
 
         try {
-            if(myPort == 11108){
+            if(myPort == 11124){
                 if(genHash(msg).compareTo(genHash(Integer.toString(myPort/2))) > 0 && genHash(msg).compareToIgnoreCase(genHash(Integer.toString(rightPort/2))) <= 0){
 
                     return rightPort;
@@ -189,7 +221,9 @@ public class SimpleDhtProvider extends ContentProvider {
 
         return 0;
     }
-
+//           s1.compare(s2)
+//            s1<s2 -> -2
+//            s1>s2 -> +2
     private boolean continueOrNot(String msg){
 // Needs work
         try{
@@ -197,12 +231,16 @@ public class SimpleDhtProvider extends ContentProvider {
                 return true;
             }
 
-            if(myPort == 11108){
+            if(myPort == 11124){
+
                 if(genHash(msg).compareTo(genHash(Integer.toString(myPort/2))) <= 0 || genHash(msg).compareToIgnoreCase(genHash(Integer.toString(leftPort/2))) > 0){
                     count++;
                     return true;
                 }else{
                     return false;
+
+
+
                 }
             }
 
@@ -297,6 +335,9 @@ public class SimpleDhtProvider extends ContentProvider {
 
             Log.i("path fetch key",selection);
             Log.i("path fetch value",contents);
+
+//            testPosition(selection);
+
             cursor.newRow()
                     .add("key", selection)
                     .add("value", contents);
@@ -310,6 +351,24 @@ public class SimpleDhtProvider extends ContentProvider {
 
     }
 
+    public void testPosition(String key)  {
+        try {
+            Log.i("testPosition key",key);
+            Log.i("testPosition myPort", String.valueOf(genHash(key).compareTo(genHash(Integer.toString(myPort / 2)))));
+            Log.i("testPosition leftPort", String.valueOf(genHash(key).compareTo(genHash(Integer.toString(leftPort / 2)))));
+
+            Log.i(key,String.valueOf(genHash(key).compareTo(genHash(Integer.toString(5554)))));
+            Log.i(key,String.valueOf(genHash(key).compareTo(genHash(Integer.toString(5556)))));
+            Log.i(key,String.valueOf(genHash(key).compareTo(genHash(Integer.toString(5558)))));
+            Log.i(key,String.valueOf(genHash(key).compareTo(genHash(Integer.toString(5560)))));
+            Log.i(key,String.valueOf(genHash(key).compareTo(genHash(Integer.toString(5562)))));
+
+
+
+        }catch (Exception e){
+            Log.i("testPosition Exception","Exception");
+        }
+    }
 
 //    /////////////////// Async Tasks Start ////////////////////////////////////////
 
@@ -380,11 +439,23 @@ public class SimpleDhtProvider extends ContentProvider {
                         String msg = in.readLine();
 // What if the selected port is 11108 in first round.
                         if(myPort == 11108 && msg.contains("connect")){
-
                             int clientPort = Integer.parseInt(msg.split(":")[1]);
-                            int left = clientPort - 4;int right = clientPort+4;
-                            if(clientPort == 11108){left = 11124;}
-                            else if(clientPort == 11124){right = 11108;}
+                            int left,right;
+                            int index = portsSortedList.indexOf(clientPort);
+
+                            if(index == portsSortedList.size()-1){
+                                right = portsSortedList.get(0);
+                                left = portsSortedList.get(index-1);
+                            }else if(index == 0){
+                                right = portsSortedList.get(1);
+                                left = portsSortedList.get(portsSortedList.size()-1);
+                            }else{
+                                right = portsSortedList.get(index+1);
+                                left = portsSortedList.get(index-1);
+                            }
+
+
+
                             String msgToSend = Integer.toString(left)+":"+Integer.toString(right);
                             ds.println(msgToSend);
                         }else if(msg.contains("insert")){
