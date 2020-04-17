@@ -1,7 +1,11 @@
 package edu.buffalo.cse.cse486586.simpledht;
 
+import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.io.PrintWriter;
+import java.io.Serializable;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -15,19 +19,11 @@ import java.util.Formatter;
 import android.content.ContentProvider;
 import android.content.ContentValues;
 import android.content.Context;
-import android.content.SharedPreferences;
 import android.database.Cursor;
 import android.database.MatrixCursor;
 import android.net.Uri;
 import android.os.AsyncTask;
-import android.provider.MediaStore;
 import android.telephony.TelephonyManager;
-import android.util.Log;
-import android.content.ContentProvider;
-import android.content.ContentValues;
-import android.content.Context;
-import android.database.Cursor;
-import android.net.Uri;
 import android.util.Log;
 
 
@@ -35,12 +31,10 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
-import java.io.FileWriter;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
-import java.util.Map;
-import java.util.TreeMap;
+import java.util.concurrent.ExecutionException;
 
 
 // command to test
@@ -53,6 +47,7 @@ public class SimpleDhtProvider extends ContentProvider {
     int firstPort = 11108;
     ArrayList<Integer> REMOTE_PORTS = new ArrayList<Integer>(Arrays.asList(11108,11112,11116,11120,11124));
     ArrayList<Integer> portsSortedList = new ArrayList<Integer>();
+
     @Override
     public int delete(Uri uri, String selection, String[] selectionArgs) {
         // TODO Auto-generated method stub
@@ -81,21 +76,17 @@ public class SimpleDhtProvider extends ContentProvider {
             if(!continueOrNot(values.get("key").toString())){
                 Log.i("return",values.get("key").toString());
                 int targetPort = findMatch(values.get("key").toString());
+                Log.i("cursor",Integer.toString(targetPort));
                 new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR,"insert", values.get("key").toString(),values.get("value").toString(),Integer.toString(targetPort));
                 return  uri;
             }
 
 
-
-            Log.i("path insert key",values.get("key").toString());
-            Log.i("path insert value",values.get("value").toString());
+            Log.i("inserted", values.get("key").toString());
             String filename = values.get("key").toString()+".txt";
-            Log.i("file","writing to a file "+filename);
             String msg = values.get("value").toString();
 
             File file = new File(context.getFilesDir(), filename);
-
-            Log.i("msg",context.getFilesDir().toString());
 
             FileOutputStream fos = context.openFileOutput(filename, Context.MODE_PRIVATE);
             fos.write(msg.getBytes());
@@ -157,6 +148,8 @@ try {
     @Override
     public Cursor query(Uri uri, String[] projection, String selection, String[] selectionArgs,
             String sortOrder) {
+
+
         Log.i("count",Integer.toString(count));
         Log.i("port left",Integer.toString(leftPort));
         Log.i("port right",Integer.toString(rightPort));
@@ -169,11 +162,23 @@ try {
 //        }
 
         Log.i("path query",selection);
-        if(selection.contains("*") || selection.contains("@")){
-            cursor = (MatrixCursor) fetchall();
-        }else{
+
+        if(selection.contains("@")){
+            cursor = (MatrixCursor) fetchLocal();
+        }else if(selection.contains("*")){
+            cursor = (MatrixCursor) fetchAll();
+        }
+        else{
             cursor  = (MatrixCursor) fetch(selection);
         }
+//        if(selection.contains("@")){
+//            cursor = (MatrixCursor) fetchLocal();
+//        }else if(selection.contains("*")){
+//            cursor = (MatrixCursor) fetchAll();
+//        }
+//        else{
+//            cursor  = (MatrixCursor) fetch(selection);
+//        }
 
         return cursor;
     }
@@ -266,8 +271,6 @@ try {
 
         Log.i("query",selection);
 
-
-        StringBuilder stringBuilder = new StringBuilder();
         String contents = "";
         try {
             String filename = selection + ".txt";
@@ -280,29 +283,57 @@ try {
             BufferedReader reader = new BufferedReader(inputStreamReader);
             String line = reader.readLine();
             while (line != null) {
-                stringBuilder.append(line);
+                contents = contents + line;
                 line = reader.readLine();
             }
 
-        }catch (Exception e){
+            Log.i("fileContents",contents);
+            cursor.newRow()
+                    .add("key", selection)
+                    .add("value", contents);
+
+        }catch (FileNotFoundException e){
+            Log.i("Exception fetch",e.getMessage());
+
+            try {
+                int port = findMatch(selection);
+                String value= new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR,"single",selection,Integer.toString(port)).get();
+                Log.i("fetch value",value);
+                cursor.newRow()
+                        .add("key", selection)
+                        .add("value", value);
+            } catch (InterruptedException ex) {
+                ex.printStackTrace();
+            } catch (ExecutionException ex) {
+                ex.printStackTrace();
+            }
+
+        }
+        catch (Exception e){
             e.printStackTrace();
-        } finally {
-            contents = stringBuilder.toString();
         }
 
-        Log.i("fileContents",contents);
-        cursor.newRow()
-                .add("key", selection)
-                .add("value", contents);
-
-
-        if(contents==""){return null;}
 
         return cursor;
 
     }
 
-    public Cursor fetchall(){
+    public MatrixCursor fetchAll(){
+
+        MatrixCursor globalCursor= new MatrixCursor(new String[]{"key","value"});
+        if(rightPort == 0){
+            return fetchLocal();
+        }
+        try {
+//            globalCursor = new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR,"queryAll").get();
+        }catch (Exception e) {
+            Log.i("Exception fetch",e.getMessage());
+        }
+
+        return globalCursor;
+    }
+
+    public MatrixCursor fetchLocal(){
 
         MatrixCursor cursor = new MatrixCursor(new String[]{"key","value"});
 
@@ -342,8 +373,16 @@ try {
                     .add("key", selection)
                     .add("value", contents);
 
+
         }
 
+        cursor.moveToFirst();
+        do{
+            String key = cursor.getString(cursor.getColumnIndex("key"));
+            String value = cursor.getString(cursor.getColumnIndex("value"));
+            Log.i("cursor",key+" "+value);
+
+        }while(cursor.moveToNext());
 
         if(contents==""){return null;}
 
@@ -372,11 +411,25 @@ try {
 
 //    /////////////////// Async Tasks Start ////////////////////////////////////////
 
-    private class ClientTask extends AsyncTask<String, Void, Void> {
+    public static class MartixCursorSerialized implements Serializable{
+
+        MatrixCursor matrixCursor;
+
+        public MartixCursorSerialized(MatrixCursor cursor) {
+            this.matrixCursor = cursor;
+        }
+
+
+        public MatrixCursor getMatrixCursor() {
+            return matrixCursor;
+        }
+    }
+
+    private class ClientTask extends AsyncTask<String, Void, String> {
 
         @Override
-        protected Void doInBackground(String... msgs) {
-
+        protected String doInBackground(String... msgs) {
+            MatrixCursor globalCursor = null;
             if(msgs[0].contains("connect")){
 
                 try {
@@ -416,6 +469,64 @@ try {
                 }
 
 
+            }else  if(msgs[0].contains("single")){
+                globalCursor =  new MatrixCursor(new String[]{"key","value"});
+                String key = msgs[1];
+                String targetPort = msgs[2];
+                Log.i("single",key+" "+targetPort);
+                Socket clientSocket = null;
+                try {
+                    clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(targetPort));
+                    PrintWriter pw = new PrintWriter(clientSocket.getOutputStream(), true);
+
+                    pw.println("single:"+key);
+                    pw.flush();
+                    BufferedReader dis = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+                    String value = dis.readLine();
+                    Log.i("Client key",key);
+                    Log.i("Client value",value);
+                    return value;
+
+                }catch (Exception e){
+
+                    Log.i("Exception Client",e.getMessage());
+
+                }
+
+            }
+            else if(msgs[0].contains("queryAll")){
+                globalCursor =  new MatrixCursor(new String[]{"key","value"});
+                for(Integer targetPort : REMOTE_PORTS){
+
+                    Socket clientSocket = null;
+                    try {
+                        clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), targetPort);
+                        PrintWriter pw = new PrintWriter(clientSocket.getOutputStream(), true);
+                        BufferedReader dis = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+                        ObjectInputStream is=new ObjectInputStream(clientSocket.getInputStream());
+                        pw.println("queryAll");
+                        MartixCursorSerialized localCursorSerialised = (MartixCursorSerialized) is.readObject();
+                        MatrixCursor localCursor = localCursorSerialised.getMatrixCursor();
+                        localCursor.moveToFirst();
+                        do{
+                            String key = localCursor.getString(localCursor.getColumnIndex("key"));
+                            String value = localCursor.getString(localCursor.getColumnIndex("value"));
+                            Log.i("globalcursor key",key);
+                            Log.i("globalcursor value",value);
+                            globalCursor.newRow()
+                                    .add("key", key)
+                                    .add("value", value);
+
+                        }while(localCursor.moveToNext());
+
+
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+
+                }
+
+
             }
 
             return null;
@@ -437,6 +548,7 @@ try {
                         BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
                         PrintWriter ds = new PrintWriter(socket.getOutputStream(), true);
                         String msg = in.readLine();
+                        Log.i("server msg",msg);
 // What if the selected port is 11108 in first round.
                         if(myPort == 11108 && msg.contains("connect")){
                             int clientPort = Integer.parseInt(msg.split(":")[1]);
@@ -453,9 +565,6 @@ try {
                                 right = portsSortedList.get(index+1);
                                 left = portsSortedList.get(index-1);
                             }
-
-
-
                             String msgToSend = Integer.toString(left)+":"+Integer.toString(right);
                             ds.println(msgToSend);
                         }else if(msg.contains("insert")){
@@ -466,18 +575,29 @@ try {
                             contentValues.put("key",key);
                             contentValues.put("value",value);
                             insert(getUri(),contentValues);
+                            socket.close();
+                        }else if(msg.contains("single")){
+                            String key = msg.split(":")[1];
+                            Log.i("single server",key);
+                            MatrixCursor cursor = (MatrixCursor) fetch(key);
+
+                            cursor.moveToFirst();
+//                            do{
+                                String key1 = cursor.getString(cursor.getColumnIndex("key"));
+                                String value = cursor.getString(cursor.getColumnIndex("value"));
+                                Log.i("cursor key",key1);
+                                Log.i("cursor value",value);
+                            ds.println(value);
 
                         }
-
-
-
-
-
-
-
+                        else if(msg.contains("queryAll")){
+                            MatrixCursor cursor = (MatrixCursor) fetchLocal();
+                            ObjectOutputStream os=new ObjectOutputStream(socket.getOutputStream());
+                            os.writeObject(cursor);
+                        }
 
                     } catch (Exception e) {
-
+                        Log.i("Exception Server",e.getMessage());
                     }
 
                 }
