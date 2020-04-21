@@ -47,6 +47,7 @@ public class SimpleDhtProvider extends ContentProvider {
     int firstPort = 11108;
     ArrayList<Integer> REMOTE_PORTS = new ArrayList<Integer>(Arrays.asList(11108,11112,11116,11120,11124));
     ArrayList<Integer> portsSortedList = new ArrayList<Integer>();
+    ArrayList<Integer> portsList = new ArrayList<Integer>();
 
     @Override
     public int delete(Uri uri, String selection, String[] selectionArgs) {
@@ -102,30 +103,30 @@ public class SimpleDhtProvider extends ContentProvider {
     @Override
     public boolean onCreate() {
         // TODO Auto-generated method stub
-try {
-    Log.i("basic check", String.valueOf(genHash("5554").compareTo(genHash("5556")))); // 1
-    Log.i("basic check", String.valueOf(genHash("5556").compareTo(genHash("5558")))); // -47
-    Log.i("basic check", String.valueOf(genHash("5558").compareTo(genHash("5560")))); // -2
-    Log.i("basic check", String.valueOf(genHash("5560").compareTo(genHash("5562")))); // 50
-
-        HashMap<String,Integer> portsHashValue = new HashMap<String, Integer>();
-        ArrayList<String> portsHashList = new ArrayList<String>();
-
-        for(int remote_port : REMOTE_PORTS ){
-            portsHashList.add(genHash(Integer.toString(remote_port/2)));
-            portsHashValue.put(genHash(Integer.toString(remote_port/2)),remote_port);
-
-        }
-
-        Collections.sort(portsHashList);
-//        Collections.reverse(portsHashList);
-
-        for(String portHash:portsHashList){
-            Log.i("hash",Integer.toString(portsHashValue.get(portHash)));
-            Log.i("hash", String.valueOf(genHash(Integer.toString(portsHashValue.get(portHash)/2)).compareTo(genHash("5560")))); // 1
-            portsSortedList.add(portsHashValue.get(portHash));
-        }
-}catch(Exception e){}
+//try {
+////    Log.i("basic check", String.valueOf(genHash("5554").compareTo(genHash("5556")))); // 1
+////    Log.i("basic check", String.valueOf(genHash("5556").compareTo(genHash("5558")))); // -47
+////    Log.i("basic check", String.valueOf(genHash("5558").compareTo(genHash("5560")))); // -2
+////    Log.i("basic check", String.valueOf(genHash("5560").compareTo(genHash("5562")))); // 50
+//
+////        HashMap<String,Integer> portsHashValue = new HashMap<String, Integer>();
+////        ArrayList<String> portsHashList = new ArrayList<String>();
+////
+////        for(int remote_port : REMOTE_PORTS ){
+////            portsHashList.add(genHash(Integer.toString(remote_port/2)));
+////            portsHashValue.put(genHash(Integer.toString(remote_port/2)),remote_port);
+////
+////        }
+////
+////        Collections.sort(portsHashList);
+////        Collections.reverse(portsHashList);
+//
+////        for(String portHash:portsHashList){
+////            Log.i("hash", String.valueOf(portsHashValue.get(portHash)));
+////            Log.i("hash", String.valueOf(genHash(Integer.toString(portsHashValue.get(portHash)/2)).compareTo(genHash("5560")))); // 1
+////            portsSortedList.add(portsHashValue.get(portHash));
+////        }
+//}catch(Exception e){}
 
         context = this.getContext();
         TelephonyManager tel = (TelephonyManager) context.getSystemService(Context.TELEPHONY_SERVICE);
@@ -150,13 +151,13 @@ try {
             String sortOrder) {
 
 
-        Log.i("count",Integer.toString(count));
+        Log.i("port my",Integer.toString(myPort));
         Log.i("port left",Integer.toString(leftPort));
         Log.i("port right",Integer.toString(rightPort));
         MatrixCursor cursor;
 
 
-//        if(!continueOrNot(selection)){
+//        if(!continueOrNot(selection))
 //            Log.i("return",selection);
 //            return  null;
 //        }
@@ -171,14 +172,7 @@ try {
         else{
             cursor  = (MatrixCursor) fetch(selection);
         }
-//        if(selection.contains("@")){
-//            cursor = (MatrixCursor) fetchLocal();
-//        }else if(selection.contains("*")){
-//            cursor = (MatrixCursor) fetchAll();
-//        }
-//        else{
-//            cursor  = (MatrixCursor) fetch(selection);
-//        }
+
 
         return cursor;
     }
@@ -231,6 +225,7 @@ try {
 //            s1>s2 -> +2
     private boolean continueOrNot(String msg){
 // Needs work
+        Log.i("insert rightPort",Integer.toString(rightPort));
         try{
             if(rightPort == 0){
                 return true;
@@ -434,23 +429,78 @@ try {
             MatrixCursor globalCursor = null;
             if(msgs[0].contains("connect")){
 
+                Log.i("timeline","1");
                 try {
 
                     Socket clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), 11108);
                     PrintWriter pw = new PrintWriter(clientSocket.getOutputStream(), true);
                     BufferedReader dis = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
                     pw.println("connect:"+Integer.toString(myPort));
-                    String left_right = dis.readLine();
-                    leftPort = Integer.parseInt(left_right.split(":")[0]);
-                    rightPort = Integer.parseInt(left_right.split(":")[1]);
 
-                    Log.i("Target ports",Integer.toString(leftPort));
-                    Log.i("Target my ports",Integer.toString(myPort));
-                    Log.i("Target ports",Integer.toString(rightPort));
+                    String connect = dis.readLine();
+                    Log.i("connect",connect);
+                    clientSocket.close();
+
+                    ArrayList<String> ports = new ArrayList<String>(Arrays.asList(connect.split(":")));
+                    ports.remove(0);
+                    Log.i("ports list",ports.toString());
+//                    for(int index=0;index<ports.size();index++){
+//                    clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(ports.get(index)));
+//                    pw = new PrintWriter(clientSocket.getOutputStream(), true);
+//                    dis = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+
+
+                        String left, right;
+//                        for (int index = 0; index < portsList.size(); index++) {
+                        int index = ports.indexOf(Integer.toString(myPort));
+
+                        Log.i("index",Integer.toString(index));
+
+                         if (index == 0) {
+                            right = ports.get(1);
+                            left = ports.get(ports.size() - 1);
+                        }else if (index == ports.size() - 1) {
+                        right = ports.get(0);
+                        left = ports.get(index - 1);
+                        } else {
+                            right = ports.get(index + 1);
+                            left = ports.get(index - 1);
+                        }
+                    rightPort = Integer.parseInt(right);
+                    leftPort = Integer.parseInt(left);
+
+                    String msgR;
+                    clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(left));
+                    pw = new PrintWriter(clientSocket.getOutputStream(), true);
+                    dis = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+                    pw.println("right:"+Integer.toString(myPort));
+                    msgR = dis.readLine();
+                    if(msgR.contains("ok")){
+                        clientSocket.close();
+                    }
+
+                    clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(right));
+                    pw = new PrintWriter(clientSocket.getOutputStream(), true);
+                    dis = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+                    pw.println("left:"+Integer.toString(myPort));
+                    msgR = dis.readLine();
+                    if(msgR.contains("ok")){
+                        clientSocket.close();
+                    }
+
+
+//
+//                    String msgToSend = "ports"+":"+left + ":" + right;
+//                        Log.i("ports",msgToSend);
+//                        pw.println(msgToSend);
+
+
+//                    }
 
                 } catch (Exception e) {
-                    leftPort = 0;
-                    rightPort = 0;
+//                    leftPort = 0;
+//                    rightPort = 0;
+                    Log.i("Exception Connectclient",e.getMessage());
                     e.printStackTrace();
                 }
 
@@ -545,21 +595,42 @@ try {
                         if(myPort == 11108 && msg.contains("connect")){
                             int clientPort = Integer.parseInt(msg.split(":")[1]);
                             int left,right;
-                            int index = portsSortedList.indexOf(clientPort);
-
-                            if(index == portsSortedList.size()-1){
-                                right = portsSortedList.get(0);
-                                left = portsSortedList.get(index-1);
-                            }else if(index == 0){
-                                right = portsSortedList.get(1);
-                                left = portsSortedList.get(portsSortedList.size()-1);
-                            }else{
-                                right = portsSortedList.get(index+1);
-                                left = portsSortedList.get(index-1);
+//                            if(portsList.contains(clientPort)){return null;}
+                            if(portsList.size() == 0){
+                                portsList.add(clientPort);
+                            }else {
+                                for(int i=0;i< portsList.size();i++){
+                                    if(genHash(Integer.toString(clientPort/2)).compareTo(genHash(Integer.toString(portsList.get(i)/2)))<0){
+                                        portsList.add(i,clientPort);
+                                        break;
+                                    }
+                                }
+                                if(!portsList.contains(clientPort)){
+                                    portsList.add(clientPort);
+                                }
                             }
-                            String msgToSend = Integer.toString(left)+":"+Integer.toString(right);
+                            Log.i("portsList",portsList.toString());
+                            String msgToSend = "";
+                            for(int port: portsList){
+                                msgToSend = msgToSend+":"+Integer.toString(port);
+                            }
+
                             ds.println(msgToSend);
-                        }else if(msg.contains("insert")){
+                            ds.flush();
+                        }else if(msg.contains("right")){
+
+                            rightPort = Integer.parseInt(msg.split(":")[1]);
+                            Log.i("ports right",Integer.toString(rightPort));
+                            ds.println("ok");
+                            ds.flush();
+//                            socket.close();
+                        }else if(msg.contains("left")){
+                            leftPort = Integer.parseInt(msg.split(":")[1]);
+                            Log.i("ports left",Integer.toString(leftPort));
+                            ds.println("ok");
+                            ds.flush();
+                        }
+                        else if(msg.contains("insert")){
 
                             String key = msg.split(":")[1];
                             String value = msg.split(":")[2];
