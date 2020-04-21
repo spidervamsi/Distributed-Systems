@@ -44,7 +44,7 @@ public class SimpleDhtProvider extends ContentProvider {
     Context context;
     int myPort,leftPort=0,rightPort=0;
     int count = 0;
-    int firstPort = 11108;
+    int firstPort = 11124;
     ArrayList<Integer> REMOTE_PORTS = new ArrayList<Integer>(Arrays.asList(11108,11112,11116,11120,11124));
     ArrayList<Integer> portsSortedList = new ArrayList<Integer>();
     ArrayList<Integer> portsList = new ArrayList<Integer>();
@@ -150,19 +150,7 @@ public class SimpleDhtProvider extends ContentProvider {
     public Cursor query(Uri uri, String[] projection, String selection, String[] selectionArgs,
             String sortOrder) {
 
-
-        Log.i("port my",Integer.toString(myPort));
-        Log.i("port left",Integer.toString(leftPort));
-        Log.i("port right",Integer.toString(rightPort));
         MatrixCursor cursor;
-
-
-//        if(!continueOrNot(selection))
-//            Log.i("return",selection);
-//            return  null;
-//        }
-
-        Log.i("path query",selection);
 
         if(selection.contains("@")){
             cursor = (MatrixCursor) fetchLocal();
@@ -199,7 +187,7 @@ public class SimpleDhtProvider extends ContentProvider {
     public int findMatch(String msg){
 
         try {
-            if(myPort == 11124){
+            if(myPort == firstPort){
                 if(genHash(msg).compareTo(genHash(Integer.toString(myPort/2))) > 0 && genHash(msg).compareToIgnoreCase(genHash(Integer.toString(rightPort/2))) <= 0){
 
                     return rightPort;
@@ -225,13 +213,13 @@ public class SimpleDhtProvider extends ContentProvider {
 //            s1>s2 -> +2
     private boolean continueOrNot(String msg){
 // Needs work
-        Log.i("insert rightPort",Integer.toString(rightPort));
+        Log.i("port continueOrNot",Integer.toString(rightPort));
         try{
             if(rightPort == 0){
                 return true;
             }
 
-            if(myPort == 11124){
+            if(myPort == firstPort){
 
                 if(genHash(msg).compareTo(genHash(Integer.toString(myPort/2))) <= 0 || genHash(msg).compareToIgnoreCase(genHash(Integer.toString(leftPort/2))) > 0){
                     count++;
@@ -263,9 +251,6 @@ public class SimpleDhtProvider extends ContentProvider {
     public Cursor fetch(String selection){
 
         MatrixCursor cursor = new MatrixCursor(new String[]{"key","value"});
-
-        Log.i("query",selection);
-
         String contents = "";
         try {
             String filename = selection + ".txt";
@@ -281,8 +266,6 @@ public class SimpleDhtProvider extends ContentProvider {
                 contents = contents + line;
                 line = reader.readLine();
             }
-
-            Log.i("fileContents",contents);
             cursor.newRow()
                     .add("key", selection)
                     .add("value", contents);
@@ -292,7 +275,6 @@ public class SimpleDhtProvider extends ContentProvider {
             try {
                 int port = findMatch(selection);
                 String value= new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR,"single",selection,Integer.toString(port)).get();
-                Log.i("fetch value",value);
                 cursor.newRow()
                         .add("key", selection)
                         .add("value", value);
@@ -326,10 +308,7 @@ public class SimpleDhtProvider extends ContentProvider {
 
         String msgs[] = msg.split(":");
 
-        Log.i("length",Integer.toString(msgs.length));
         for(int i=1;i<msgs.length;i = i+2){
-            Log.i("length key",msgs[i]);
-            Log.i("length value",msgs[i+1]);
             globalCursor.newRow()
                     .add("key", msgs[i])
                     .add("value", msgs[i+1]);
@@ -368,12 +347,6 @@ public class SimpleDhtProvider extends ContentProvider {
             } finally {
                 contents = stringBuilder.toString();
             }
-
-            Log.i("path fetch key",selection);
-            Log.i("path fetch value",contents);
-
-//            testPosition(selection);
-
             cursor.newRow()
                     .add("key", selection)
                     .add("value", contents);
@@ -386,42 +359,7 @@ public class SimpleDhtProvider extends ContentProvider {
         return cursor;
 
     }
-
-    public void testPosition(String key)  {
-        try {
-            Log.i("testPosition key",key);
-            Log.i("testPosition myPort", String.valueOf(genHash(key).compareTo(genHash(Integer.toString(myPort / 2)))));
-            Log.i("testPosition leftPort", String.valueOf(genHash(key).compareTo(genHash(Integer.toString(leftPort / 2)))));
-
-            Log.i(key,String.valueOf(genHash(key).compareTo(genHash(Integer.toString(5554)))));
-            Log.i(key,String.valueOf(genHash(key).compareTo(genHash(Integer.toString(5556)))));
-            Log.i(key,String.valueOf(genHash(key).compareTo(genHash(Integer.toString(5558)))));
-            Log.i(key,String.valueOf(genHash(key).compareTo(genHash(Integer.toString(5560)))));
-            Log.i(key,String.valueOf(genHash(key).compareTo(genHash(Integer.toString(5562)))));
-
-
-
-        }catch (Exception e){
-            Log.i("testPosition Exception","Exception");
-        }
-    }
-
 //    /////////////////// Async Tasks Start ////////////////////////////////////////
-
-    public static class MartixCursorSerialized implements Serializable{
-
-        MatrixCursor matrixCursor;
-
-        public MartixCursorSerialized(MatrixCursor cursor) {
-            this.matrixCursor = cursor;
-        }
-
-
-        public MatrixCursor getMatrixCursor() {
-            return matrixCursor;
-        }
-    }
-
     private class ClientTask extends AsyncTask<String, Void, String> {
 
         @Override
@@ -429,7 +367,6 @@ public class SimpleDhtProvider extends ContentProvider {
             MatrixCursor globalCursor = null;
             if(msgs[0].contains("connect")){
 
-                Log.i("timeline","1");
                 try {
 
                     Socket clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), 11108);
@@ -444,14 +381,7 @@ public class SimpleDhtProvider extends ContentProvider {
                     ArrayList<String> ports = new ArrayList<String>(Arrays.asList(connect.split(":")));
                     ports.remove(0);
                     Log.i("ports list",ports.toString());
-//                    for(int index=0;index<ports.size();index++){
-//                    clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(ports.get(index)));
-//                    pw = new PrintWriter(clientSocket.getOutputStream(), true);
-//                    dis = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
-
-
                         String left, right;
-//                        for (int index = 0; index < portsList.size(); index++) {
                         int index = ports.indexOf(Integer.toString(myPort));
 
                         Log.i("index",Integer.toString(index));
@@ -473,7 +403,7 @@ public class SimpleDhtProvider extends ContentProvider {
                     clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(left));
                     pw = new PrintWriter(clientSocket.getOutputStream(), true);
                     dis = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
-                    pw.println("right:"+Integer.toString(myPort));
+                    pw.println("right:"+Integer.toString(myPort)+":"+ports.get(0));
                     msgR = dis.readLine();
                     if(msgR.contains("ok")){
                         clientSocket.close();
@@ -488,18 +418,22 @@ public class SimpleDhtProvider extends ContentProvider {
                         clientSocket.close();
                     }
 
+                    for(String port : ports){
 
-//
-//                    String msgToSend = "ports"+":"+left + ":" + right;
-//                        Log.i("ports",msgToSend);
-//                        pw.println(msgToSend);
+                        clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(port));
+                        pw = new PrintWriter(clientSocket.getOutputStream(), true);
+                        dis = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+                        pw.println("firstPort:"+ports.get(0));
+                        msgR = dis.readLine();
+                        if(msgR.contains("ok")){
+                            clientSocket.close();
+                        }
+
+                    }
 
 
-//                    }
 
                 } catch (Exception e) {
-//                    leftPort = 0;
-//                    rightPort = 0;
                     Log.i("Exception Connectclient",e.getMessage());
                     e.printStackTrace();
                 }
@@ -525,7 +459,6 @@ public class SimpleDhtProvider extends ContentProvider {
                 globalCursor =  new MatrixCursor(new String[]{"key","value"});
                 String key = msgs[1];
                 String targetPort = msgs[2];
-                Log.i("single",key+" "+targetPort);
                 Socket clientSocket = null;
                 try {
                     clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(targetPort));
@@ -535,8 +468,6 @@ public class SimpleDhtProvider extends ContentProvider {
                     pw.flush();
                     BufferedReader dis = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
                     String value = dis.readLine();
-                    Log.i("Client key",key);
-                    Log.i("Client value",value);
                     clientSocket.close();
                     return value;
 
@@ -590,12 +521,10 @@ public class SimpleDhtProvider extends ContentProvider {
                         BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
                         PrintWriter ds = new PrintWriter(socket.getOutputStream(), true);
                         String msg = in.readLine();
-                        Log.i("server msg",msg);
 // What if the selected port is 11108 in first round.
                         if(myPort == 11108 && msg.contains("connect")){
                             int clientPort = Integer.parseInt(msg.split(":")[1]);
                             int left,right;
-//                            if(portsList.contains(clientPort)){return null;}
                             if(portsList.size() == 0){
                                 portsList.add(clientPort);
                             }else {
@@ -609,7 +538,6 @@ public class SimpleDhtProvider extends ContentProvider {
                                     portsList.add(clientPort);
                                 }
                             }
-                            Log.i("portsList",portsList.toString());
                             String msgToSend = "";
                             for(int port: portsList){
                                 msgToSend = msgToSend+":"+Integer.toString(port);
@@ -617,16 +545,22 @@ public class SimpleDhtProvider extends ContentProvider {
 
                             ds.println(msgToSend);
                             ds.flush();
-                        }else if(msg.contains("right")){
+                        }else if(msg.contains("firstPort")){
+                            firstPort = Integer.parseInt(msg.split(":")[1]);
+                            Log.i("port firstPort",Integer.toString(firstPort));
+                            ds.println("ok");
+                            ds.flush();
+                        }
+                        else if(msg.contains("right")){
 
                             rightPort = Integer.parseInt(msg.split(":")[1]);
-                            Log.i("ports right",Integer.toString(rightPort));
+                            Log.i("port right",Integer.toString(rightPort));
                             ds.println("ok");
                             ds.flush();
 //                            socket.close();
                         }else if(msg.contains("left")){
                             leftPort = Integer.parseInt(msg.split(":")[1]);
-                            Log.i("ports left",Integer.toString(leftPort));
+                            Log.i("port left",Integer.toString(leftPort));
                             ds.println("ok");
                             ds.flush();
                         }
@@ -638,17 +572,14 @@ public class SimpleDhtProvider extends ContentProvider {
                             contentValues.put("key",key);
                             contentValues.put("value",value);
                             insert(getUri(),contentValues);
-//                            socket.close();
+                            socket.close();
                         }else if(msg.contains("single")){
                             String key = msg.split(":")[1];
-                            Log.i("single server",key);
                             MatrixCursor cursor = (MatrixCursor) fetch(key);
 
                             cursor.moveToFirst();
                                 String key1 = cursor.getString(cursor.getColumnIndex("key"));
                                 String value = cursor.getString(cursor.getColumnIndex("value"));
-                                Log.i("cursor key",key1);
-                                Log.i("cursor value",value);
                             ds.println(value);
 
                         }
@@ -656,14 +587,12 @@ public class SimpleDhtProvider extends ContentProvider {
                             MatrixCursor cursor = (MatrixCursor) fetchLocal();
                             String msgToSend = "";
 
-                            Log.i("length count",Integer.toString(cursor.getCount()));
 
                             cursor.moveToFirst();
                             do{
                                 String key = cursor.getString(cursor.getColumnIndex("key"));
                                 String value = cursor.getString(cursor.getColumnIndex("value"));
                                 msgToSend = msgToSend+":"+key+":"+value;
-                                Log.i("queryAll cursor",key);
 
                             }while(cursor.moveToNext());
 
