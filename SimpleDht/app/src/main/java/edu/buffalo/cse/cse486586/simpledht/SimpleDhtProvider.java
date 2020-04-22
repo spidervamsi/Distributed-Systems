@@ -307,13 +307,16 @@ public class SimpleDhtProvider extends ContentProvider {
         }
 
         String msgs[] = msg.split(":");
-
+        Log.i("cursor length", String.valueOf(msgs.length));
         for(int i=1;i<msgs.length;i = i+2){
+            if(msgs[i].equals("null")){continue;}
             globalCursor.newRow()
                     .add("key", msgs[i])
                     .add("value", msgs[i+1]);
+            Log.i("cursor key",msgs[i]);
+            Log.i("cursor value",msgs[i+1]);
         }
-
+        Log.i("cursor count", String.valueOf(globalCursor.getCount()));
         return globalCursor;
     }
 
@@ -354,7 +357,6 @@ public class SimpleDhtProvider extends ContentProvider {
 
         }
 
-        if(contents==""){return null;}
 
         return cursor;
 
@@ -380,6 +382,8 @@ public class SimpleDhtProvider extends ContentProvider {
 
                     ArrayList<String> ports = new ArrayList<String>(Arrays.asList(connect.split(":")));
                     ports.remove(0);
+
+
                     Log.i("ports list",ports.toString());
                         String left, right;
                         int index = ports.indexOf(Integer.toString(myPort));
@@ -428,7 +432,6 @@ public class SimpleDhtProvider extends ContentProvider {
                         if(msgR.contains("ok")){
                             clientSocket.close();
                         }
-
                     }
 
 
@@ -482,7 +485,6 @@ public class SimpleDhtProvider extends ContentProvider {
                 globalCursor =  new MatrixCursor(new String[]{"key","value"});
                 String msgRec="";
                 for(Integer targetPort : REMOTE_PORTS){
-
                     Socket clientSocket = null;
                     try {
                         clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), targetPort);
@@ -490,15 +492,20 @@ public class SimpleDhtProvider extends ContentProvider {
                         pw.println("queryAll");
                         pw.flush();
                         BufferedReader dis = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+                        clientSocket.setSoTimeout(500);
                         String value = dis.readLine();
                         clientSocket.close();
+                        if(value.contains("null")){continue;}
                         msgRec = msgRec + value;
+
                     } catch (Exception e) {
-                        Log.i("Excpetion QueryAll", e.getMessage());
+                        Log.i("Excpetion QueryAll","Excpetion "+ e.getMessage());
                         e.printStackTrace();
                     }
 
                 }
+                Log.i("cursor portsList",portsList.toString());
+                Log.i("cursor msgRec",Integer.toString(msgRec.split(":").length));
                 return msgRec;
             }
 
@@ -587,21 +594,33 @@ public class SimpleDhtProvider extends ContentProvider {
                             MatrixCursor cursor = (MatrixCursor) fetchLocal();
                             String msgToSend = "";
 
+                            try {
+                                cursor.moveToFirst();
+                                do {
+                                    String key = cursor.getString(cursor.getColumnIndex("key"));
+                                    String value = cursor.getString(cursor.getColumnIndex("value"));
+                                    msgToSend = msgToSend + ":" + key + ":" + value;
 
-                            cursor.moveToFirst();
-                            do{
-                                String key = cursor.getString(cursor.getColumnIndex("key"));
-                                String value = cursor.getString(cursor.getColumnIndex("value"));
-                                msgToSend = msgToSend+":"+key+":"+value;
+                                } while (cursor.moveToNext());
 
-                            }while(cursor.moveToNext());
+                                Log.i("cursor msgToSend",msgToSend);
 
-                            ds.println(msgToSend);
+                                if (msgToSend == "") {
+                                    msgToSend = ":" + "null" + ":" + "null";
+                                }
+                                ds.println(msgToSend);
+
+                            }catch (Exception e){
+                                Log.i("cursor Exception",msgToSend);
+                                ds.println(":" + "null" + ":" + "null");
+                            }
+
 
                         }
 
                     } catch (Exception e) {
-                        Log.i("Exception Server",e.getMessage());
+                        Log.i("Exception Server","Unknown Exception "+e.getMessage());
+
                     }
 
                 }
