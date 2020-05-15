@@ -281,20 +281,14 @@ public class SimpleDynamoProvider extends ContentProvider {
 	public int findMatch(String msg){
 
 		try {
-			if(myPort == 11124){
-				if(genHash(msg).compareTo(genHash(Integer.toString(myPort/2))) > 0 && genHash(msg).compareToIgnoreCase(genHash(Integer.toString(rightPort/2))) <= 0){
 
-					return rightPort;
-				}else {
-					return leftPort;
+			for(int i=1;i<portsSortedList.size();i++){
+				if(genHash(msg).compareTo(genHash(Integer.toString(portsSortedList.get(i)/2))) < 0 && genHash(msg).compareTo(genHash(Integer.toString(portsSortedList.get(i-1)/2))) > 0){
+					return portsSortedList.get(i);
 				}
 			}
 
-			if(genHash(msg).compareTo(genHash(Integer.toString(myPort/2))) > 0){
-				return rightPort;
-			}else{
-				return leftPort;
-			}
+			return portsSortedList.get(0);
 		} catch (NoSuchAlgorithmException e) {
 			e.printStackTrace();
 		}
