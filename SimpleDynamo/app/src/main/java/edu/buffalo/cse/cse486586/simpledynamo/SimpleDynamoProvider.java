@@ -65,6 +65,40 @@ public class SimpleDynamoProvider extends ContentProvider {
 	@Override
 	public int delete(Uri uri, String selection, String[] selectionArgs) {
 		// TODO Auto-generated method stub
+
+		String contents = "";
+		try {
+
+			if(selection.equals("@")){
+
+				String[] filenames = context.fileList();
+				for(String filename: filenames){
+					context.deleteFile(filename);
+				}
+
+			}else if(selection.equals("*")){
+				try {
+					new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR,"deleteAll");
+				} catch (Exception ex){
+
+				}
+
+			}else{
+				String filename = selection + ".txt";
+				FileInputStream fis;
+				if(!context.deleteFile(filename)){
+					try {
+						int port = findMatch(selection);
+						new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR,"deleteOne",selection,Integer.toString(port));
+					} catch (Exception ex){
+					}
+				}
+			}
+
+
+
+		}catch (Exception e){
+		}
 		return 0;
 	}
 
@@ -580,6 +614,35 @@ public class SimpleDynamoProvider extends ContentProvider {
 
 				}
 				return msgRec;
+			}else if(msgs[0].contains("deleteOne")){
+
+				try {
+					String key = msgs[1];
+					String targetPort = msgs[2];
+					Socket clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(targetPort));
+					PrintWriter pw = new PrintWriter(clientSocket.getOutputStream(), true);
+					BufferedReader dis = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+					pw.println("deleteOne:"+key);
+
+				}catch (Exception e){
+					Log.i("Exception delete","delete "+e.getMessage());
+				}
+
+			}else if(msgs[0].contains("deleteAll")){
+				for(Integer targetPort : REMOTE_PORTS){
+					Socket clientSocket = null;
+					try {
+						clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), targetPort);
+						PrintWriter pw = new PrintWriter(clientSocket.getOutputStream(), true);
+						pw.println("deleteAll");
+						pw.flush();
+						clientSocket.setSoTimeout(500);
+					} catch (Exception e) {
+						Log.i("Excpetion deleteAll","Excpetion "+ e.getMessage());
+						e.printStackTrace();
+					}
+
+				}
 			}
 
 			return null;
@@ -670,6 +733,13 @@ public class SimpleDynamoProvider extends ContentProvider {
 							}while(cursor.moveToNext());
 
 							ds.println(msgToSend);
+
+						}else if(msg.contains("deleteAll")){
+							delete(getUri(),"@",null);
+						}
+						else if(msg.contains("deleteOne")){
+							String key = msg.split(":")[1];
+							delete(getUri(),key,null);
 
 						}
 
