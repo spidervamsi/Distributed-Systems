@@ -170,32 +170,9 @@ public class SimpleDynamoProvider extends ContentProvider {
 			Log.i("basic check", String.valueOf(genHash("5558").compareTo(genHash("5560")))); // -2
 			Log.i("basic check", String.valueOf(genHash("5560").compareTo(genHash("5562")))); // 50
 
-			HashMap<String,Integer> portsHashValue = new HashMap<String, Integer>();
-			ArrayList<String> portsHashList = new ArrayList<String>();
 
-			for(int remote_port : REMOTE_PORTS ){
-				portsHashList.add(genHash(Integer.toString(remote_port/2)));
-				portsHashValue.put(genHash(Integer.toString(remote_port/2)),remote_port);
-
-			}
-
-			Collections.sort(portsHashList);
-//        Collections.reverse(portsHashList);
-
-			for(String portHash:portsHashList){
-				Log.i("hash",Integer.toString(portsHashValue.get(portHash)));
-				Log.i("hash", String.valueOf(genHash(Integer.toString(portsHashValue.get(portHash)/2)).compareTo(genHash("5560")))); // 1
-				portsSortedList.add(portsHashValue.get(portHash));
-			}
-
-			myPortpos = 0;
-			for(int port:portsSortedList){
-				if(port == myPort){
-					break;
-				}else{
-					myPortpos++;
-				}
-			}
+			loadPorts();
+			loadPortPos();
 
 		}catch(Exception e){}
 
@@ -217,28 +194,71 @@ public class SimpleDynamoProvider extends ContentProvider {
 		return false;
 	}
 
+
+	public void loadPortPos(){
+		myPortpos = 0;
+		for(int port:portsSortedList){
+			if(port == myPort){
+				break;
+			}else{
+				myPortpos++;
+			}
+		}
+	}
+
+
+	public void loadPorts(){
+try {
+	    portsSortedList.clear();
+		HashMap<String,Integer> portsHashValue = new HashMap<String, Integer>();
+		ArrayList<String> portsHashList = new ArrayList<String>();
+
+		for(int remote_port : REMOTE_PORTS ){
+			portsHashList.add(genHash(Integer.toString(remote_port/2)));
+			portsHashValue.put(genHash(Integer.toString(remote_port/2)),remote_port);
+
+		}
+
+		Collections.sort(portsHashList);
+//        Collections.reverse(portsHashList);
+
+		for(String portHash:portsHashList){
+			Log.i("hash",Integer.toString(portsHashValue.get(portHash)));
+			Log.i("hash", String.valueOf(genHash(Integer.toString(portsHashValue.get(portHash)/2)).compareTo(genHash("5560")))); // 1
+			portsSortedList.add(portsHashValue.get(portHash));
+		}
+		int index = portsSortedList.indexOf(myPort);
+
+		if(index == 0){
+			leftPort = portsSortedList.get(portsSortedList.size()-1);
+			rightPort = portsSortedList.get(index+1);
+		}else if(index == portsSortedList.size()-1){
+			leftPort = portsSortedList.get(index-1);
+			rightPort = portsSortedList.get(0);
+		}else {
+			leftPort = portsSortedList.get(index-1);
+			rightPort = portsSortedList.get(index+1);
+		}
+
+
+}catch (Exception e){}
+
+	}
+
+
 	@Override
 	public Cursor query(Uri uri, String[] projection, String selection, String[] selectionArgs,
 						String sortOrder) {
 
-
-		Log.i("count",Integer.toString(count));
-		Log.i("port left",Integer.toString(leftPort));
-		Log.i("port right",Integer.toString(rightPort));
 		MatrixCursor cursor;
-
-
-//        if(!continueOrNot(selection)){
-//            Log.i("return",selection);
-//            return  null;
-//        }
-
 		Log.i("path query",selection);
 
 		if(selection.contains("@")){
 			cursor = (MatrixCursor) fetchLocal();
 		}else if(selection.contains("*")){
 			cursor = (MatrixCursor) fetchAll();
+		}else if(selection.contains("original")){
+			cursor = (MatrixCursor) fetchOriginal();
 		}
 		else{
 			cursor  = (MatrixCursor) fetch(selection);
@@ -297,11 +317,31 @@ public class SimpleDynamoProvider extends ContentProvider {
 //            s1>s2 -> +2
 	private boolean continueOrNot(String msg){
 // Needs work
-		if(myPort == findMatch(msg)){
-			return true;
-		}else {
-			return false;
+		Log.i("port continueOrNot",Integer.toString(rightPort));
+		try{
+
+			if(myPort == firstPort){
+
+				if(genHash(msg).compareTo(genHash(Integer.toString(myPort/2))) <= 0 || genHash(msg).compareToIgnoreCase(genHash(Integer.toString(leftPort/2))) > 0){
+
+					return true;
+				}else{
+					return false;
+				}
+			}
+
+			if(genHash(msg).compareTo(genHash(Integer.toString(myPort/2))) <= 0 && genHash(msg).compareToIgnoreCase(genHash(Integer.toString(leftPort/2))) > 0){
+
+				return true;
+			}else{
+				return false;
+			}
+
+		}catch (Exception e){
+			Log.i("Exception", e.getMessage());
 		}
+
+		return false;
 	}
 
 
@@ -380,6 +420,67 @@ public class SimpleDynamoProvider extends ContentProvider {
 		return globalCursor;
 	}
 
+
+	public MatrixCursor fetchOriginal(){
+
+		MatrixCursor cursor = new MatrixCursor(new String[]{"key","value"});
+
+
+		String[] filenames = context.fileList();
+		String contents = "";
+		for(String filename : filenames) {
+			String selection;
+			selection = filename.split(".txt")[0];
+
+			if(!continueOrNot(selection)){
+				continue;
+			}
+
+
+			StringBuilder stringBuilder = new StringBuilder();
+			try {
+				FileInputStream fis;
+				fis = context.openFileInput(filename);
+				InputStreamReader inputStreamReader =
+						new InputStreamReader(fis, StandardCharsets.UTF_8);
+
+				BufferedReader reader = new BufferedReader(inputStreamReader);
+				String line = reader.readLine();
+				while (line != null) {
+					stringBuilder.append(line);
+					line = reader.readLine();
+				}
+
+			} catch (Exception e) {
+				e.printStackTrace();
+			} finally {
+				contents = stringBuilder.toString();
+			}
+
+			Log.i("path fetch key",selection);
+			Log.i("path fetch value",contents);
+
+//            testPosition(selection);
+
+			cursor.newRow()
+					.add("key", selection)
+					.add("value", contents);
+
+
+		}
+
+		if(contents==""){return null;}
+
+		return cursor;
+
+	}
+
+
+
+
+
+
+
 	public MatrixCursor fetchLocal(){
 
 		MatrixCursor cursor = new MatrixCursor(new String[]{"key","value"});
@@ -429,24 +530,6 @@ public class SimpleDynamoProvider extends ContentProvider {
 
 	}
 
-	public void testPosition(String key)  {
-		try {
-			Log.i("testPosition key",key);
-			Log.i("testPosition myPort", String.valueOf(genHash(key).compareTo(genHash(Integer.toString(myPort / 2)))));
-			Log.i("testPosition leftPort", String.valueOf(genHash(key).compareTo(genHash(Integer.toString(leftPort / 2)))));
-
-			Log.i(key,String.valueOf(genHash(key).compareTo(genHash(Integer.toString(5554)))));
-			Log.i(key,String.valueOf(genHash(key).compareTo(genHash(Integer.toString(5556)))));
-			Log.i(key,String.valueOf(genHash(key).compareTo(genHash(Integer.toString(5558)))));
-			Log.i(key,String.valueOf(genHash(key).compareTo(genHash(Integer.toString(5560)))));
-			Log.i(key,String.valueOf(genHash(key).compareTo(genHash(Integer.toString(5562)))));
-
-
-
-		}catch (Exception e){
-			Log.i("testPosition Exception","Exception");
-		}
-	}
 
 //    /////////////////// Async Tasks Start ////////////////////////////////////////
 
