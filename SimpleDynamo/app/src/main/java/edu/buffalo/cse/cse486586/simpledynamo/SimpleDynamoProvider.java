@@ -361,9 +361,6 @@ public class SimpleDynamoProvider extends ContentProvider {
 
 		MatrixCursor globalCursor= new MatrixCursor(new String[]{"key","value"});
 		String msg="";
-//		if(rightPort == 0){
-//			return fetchLocal();
-//		}
 		try {
 			msg = new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR,"queryAll").get();
 		}catch (Exception e) {
@@ -474,24 +471,21 @@ public class SimpleDynamoProvider extends ContentProvider {
 			MatrixCursor globalCursor = null;
 			if(msgs[0].contains("connect")){
 
-				try {
-
-					Socket clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), 11108);
-					PrintWriter pw = new PrintWriter(clientSocket.getOutputStream(), true);
-					BufferedReader dis = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
-					pw.println("connect:"+Integer.toString(myPort));
-					String left_right = dis.readLine();
-					leftPort = Integer.parseInt(left_right.split(":")[0]);
-					rightPort = Integer.parseInt(left_right.split(":")[1]);
-
-
-
-				} catch (Exception e) {
-					leftPort = 0;
-					rightPort = 0;
-					e.printStackTrace();
+				for(int port:REMOTE_PORTS) {
+					if(port==myPort){continue;}
+					try {
+						Socket clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), port);
+						PrintWriter pw = new PrintWriter(clientSocket.getOutputStream(), true);
+						BufferedReader dis = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+						clientSocket.setSoTimeout(100);
+						pw.println("connect:" + Integer.toString(myPort));
+						String res = dis.readLine();
+						clientSocket.close();
+						Log.i("connect","connect "+res);
+					} catch (Exception e) {
+						e.printStackTrace();
+					}
 				}
-
 			}else if(msgs[0].contains("insert")){
 				String key = msgs[1];
 				String value = msgs[2];
@@ -505,30 +499,27 @@ public class SimpleDynamoProvider extends ContentProvider {
 					BufferedReader dis = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
 					clientSocket.setSoTimeout(100);
 					pw.println("insert:"+key+":"+value);
-					Log.i("dis","dis"+dis.readLine());
+					String res = dis.readLine();
 					clientSocket.close();
+					Log.i("dis","dis:"+targetPort+":"+res);
+					if(res == null && failedPort ==0){
+						Log.i("failedPort",targetPort);
+						failedPort = Integer.parseInt(targetPort);
+
+						portsSortedList.remove(Integer.valueOf(failedPort));
+						REMOTE_PORTS.remove(Integer.valueOf(failedPort));
+
+						for(int port:REMOTE_PORTS){
+							try{
+								clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),port);
+								pw = new PrintWriter(clientSocket.getOutputStream(), true);
+								pw.println("failedPort:"+Integer.toString(failedPort));
+							}catch (Exception ex){
+							}
+						}
+					}
 				} catch (Exception e) {
 					Log.i("clientException","socket timeout "+targetPort);
-//					if(failedPort==0){
-//						failedPort = Integer.parseInt(targetPort);
-//						Log.i("failedPort",Integer.toString(failedPort));
-//						portsSortedList.remove(Integer.valueOf(failedPort));
-//						REMOTE_PORTS.remove(Integer.valueOf(failedPort));
-//
-//						for(int port:REMOTE_PORTS){
-//							try{
-//								clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),port);
-//								PrintWriter pw = new PrintWriter(clientSocket.getOutputStream(), true);
-//								pw.println("failedPort:"+Integer.toString(failedPort));
-//							}catch (Exception ex){
-//
-//							}
-//
-//						}
-//
-//
-//					}
-
 
 				}
 
@@ -545,8 +536,27 @@ public class SimpleDynamoProvider extends ContentProvider {
 					BufferedReader dis = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
 					Log.i("replication","replication:"+key+":"+value+":"+Integer.toString(replicationCount)+"targetPort:"+Integer.toString(targetPort));
 					pw.println("replication:"+key+":"+value+":"+Integer.toString(replicationCount));
-					Log.i("dis","dis"+dis.readLine());
+					pw.println("insert:"+key+":"+value);
+					String res = dis.readLine();
 					clientSocket.close();
+					Log.i("dis","dis:"+targetPort+":"+res);
+					if(res == null && failedPort ==0){
+						failedPort = targetPort;
+
+						portsSortedList.remove(Integer.valueOf(failedPort));
+						REMOTE_PORTS.remove(Integer.valueOf(failedPort));
+
+						for(int port:REMOTE_PORTS){
+							try{
+								clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),port);
+								pw = new PrintWriter(clientSocket.getOutputStream(), true);
+								pw.println("failedPort:"+Integer.toString(failedPort));
+							}catch (Exception ex){
+							}
+						}
+					}
+
+
 				} catch (IOException e) {
 					e.printStackTrace();
 				}
@@ -651,25 +661,16 @@ public class SimpleDynamoProvider extends ContentProvider {
 						BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
 						PrintWriter ds = new PrintWriter(socket.getOutputStream(), true);
 						String msg = in.readLine();
-						Log.i("server msg",msg);
-// What if the selected port is 11108 in first round.
-						if(myPort == 11108 && msg.contains("connect")){
-							int clientPort = Integer.parseInt(msg.split(":")[1]);
-							int left,right;
-							int index = portsSortedList.indexOf(clientPort);
 
-							if(index == portsSortedList.size()-1){
-								right = portsSortedList.get(0);
-								left = portsSortedList.get(index-1);
-							}else if(index == 0){
-								right = portsSortedList.get(1);
-								left = portsSortedList.get(portsSortedList.size()-1);
+						if(msg.contains("connect")){
+
+							if(failedPort==0){
+								ds.println("normal");
 							}else{
-								right = portsSortedList.get(index+1);
-								left = portsSortedList.get(index-1);
+								ds.println("connectback");
 							}
-							String msgToSend = Integer.toString(left)+":"+Integer.toString(right);
-							ds.println(msgToSend);
+
+
 						}else if(msg.contains("insert")){
 
 							String key = msg.split(":")[1];
