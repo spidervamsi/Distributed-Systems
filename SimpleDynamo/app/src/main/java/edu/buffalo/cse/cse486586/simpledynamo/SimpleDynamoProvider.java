@@ -71,7 +71,31 @@ public class SimpleDynamoProvider extends ContentProvider {
 		String contents = "";
 		try {
 
-			if(selection.equals("@")){
+			if(selection.equals("trim")){
+				int b1 = leftPort;
+				int l1 = getLeftPort(b1);
+				int b2 = l1;
+				int l2 = getLeftPort(b2);
+
+				String[] filenames = context.fileList();
+				for(String filename: filenames){
+					String msg = filename.split(".txt")[0];
+					if(continueOrNot(msg,myPort,leftPort)){
+						continue;
+					}else if(continueOrNot(msg,b1,l1)){
+						continue;
+					}else if(continueOrNot(msg,b2,l2)){
+						continue;
+					}else{
+						context.deleteFile(filename);
+						Log.i("delete","delete");
+					}
+
+				}
+
+
+			}
+			else if(selection.equals("@")){
 
 				String[] filenames = context.fileList();
 				for(String filename: filenames){
@@ -125,7 +149,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 		if(values.containsKey("rightport")){
 			String msg = values.get("value").toString();
 			String msgs[] = msg.split(":");
-
+			Log.i("length",Integer.toString(msgs.length));
 			for(int i=1;i<msgs.length;i = i+2){
 				Log.i("length key",msgs[i]);
 				Log.i("length value",msgs[i+1]);
@@ -137,7 +161,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 					File file = new File(context.getFilesDir(), filename);
 
 					FileOutputStream fos = context.openFileOutput(filename, Context.MODE_PRIVATE);
-					fos.write(msg.getBytes());
+					fos.write(value.getBytes());
 					fos.close();
 				} catch (Exception e) {
 					e.printStackTrace();
@@ -239,6 +263,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 
 	public void loadPorts(){
 try {
+		REMOTE_PORTS = new ArrayList<Integer>(Arrays.asList(11108,11112,11116,11120,11124));
 	    portsSortedList.clear();
 		HashMap<String,Integer> portsHashValue = new HashMap<String, Integer>();
 		ArrayList<String> portsHashList = new ArrayList<String>();
@@ -293,14 +318,6 @@ try {
 		else{
 			cursor  = (MatrixCursor) fetch(selection);
 		}
-//        if(selection.contains("@")){
-//            cursor = (MatrixCursor) fetchLocal();
-//        }else if(selection.contains("*")){
-//            cursor = (MatrixCursor) fetchAll();
-//        }
-//        else{
-//            cursor  = (MatrixCursor) fetch(selection);
-//        }
 
 		return cursor;
 	}
@@ -345,14 +362,32 @@ try {
 	//           s1.compare(s2)
 //            s1<s2 -> -2
 //            s1>s2 -> +2
-	private boolean continueOrNot(String msg){
+
+	private int getLeftPort(int current){
+
+		if(current == portsSortedList.get(0)){
+			return portsSortedList.get(portsSortedList.size()-1);
+		}
+		int index = portsSortedList.indexOf(Integer.valueOf(current));
+		return portsSortedList.get(index-1);
+	}
+
+	private int getRightPort(int current){
+
+		if(current ==  portsSortedList.get(portsSortedList.size()-1)){
+			return portsSortedList.get(0);
+		}
+		int index = portsSortedList.indexOf(Integer.valueOf(current));
+		return portsSortedList.get(index+1);
+	}
+
+	private boolean continueOrNot(String msg,int current,int left){
 // Needs work
-		Log.i("port continueOrNot",Integer.toString(rightPort));
 		try{
 
-			if(myPort == firstPort){
+			if(current == portsSortedList.get(0)){
 
-				if(genHash(msg).compareTo(genHash(Integer.toString(myPort/2))) <= 0 || genHash(msg).compareToIgnoreCase(genHash(Integer.toString(leftPort/2))) > 0){
+				if(genHash(msg).compareTo(genHash(Integer.toString(current/2))) <= 0 || genHash(msg).compareToIgnoreCase(genHash(Integer.toString(left/2))) > 0){
 
 					return true;
 				}else{
@@ -360,7 +395,7 @@ try {
 				}
 			}
 
-			if(genHash(msg).compareTo(genHash(Integer.toString(myPort/2))) <= 0 && genHash(msg).compareToIgnoreCase(genHash(Integer.toString(leftPort/2))) > 0){
+			if(genHash(msg).compareTo(genHash(Integer.toString(current/2))) <= 0 && genHash(msg).compareToIgnoreCase(genHash(Integer.toString(left/2))) > 0){
 
 				return true;
 			}else{
@@ -462,9 +497,9 @@ try {
 			String selection;
 			selection = filename.split(".txt")[0];
 
-			if(!continueOrNot(selection)){
-				continue;
-			}
+//			if(!continueOrNot(selection)){
+//				continue;
+//			}
 
 
 			StringBuilder stringBuilder = new StringBuilder();
@@ -594,7 +629,7 @@ try {
 						pw.println("connect:" + Integer.toString(myPort));
 						String res = dis.readLine();
 						clientSocket.close();
-						if(res == "connectback"){
+						if(res.contains("connectback")){
 							recoveredPort = myPort;
 							break;
 						}
@@ -605,6 +640,7 @@ try {
 				}
 
 				if(recoveredPort == myPort){
+					Log.i("connectback","connectback");
 					int targetPort = rightPort;
 						Socket clientSocket = null;
 						try {
@@ -625,10 +661,25 @@ try {
 							Log.i("Excpetion QueryAll", e.getMessage());
 							e.printStackTrace();
 						}
-//					return msgRec;
+
+						for(int port: REMOTE_PORTS){
+							try {
+								clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), port);
+								PrintWriter pw = new PrintWriter(clientSocket.getOutputStream(), true);
+								pw.println("rearrange:"+Integer.toString(recoveredPort));
+								pw.flush();
+								BufferedReader dis = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+								String value = dis.readLine();
+								clientSocket.close();
+							} catch (Exception e) {
+								Log.i("Excpetion queryOriginal", e.getMessage());
+								e.printStackTrace();
+							}
+						}
 
 				}
-			}else if(msgs[0].contains("insert")){
+			}
+			else if(msgs[0].contains("insert")){
 				String key = msgs[1];
 				String value = msgs[2];
 				String targetPort = msgs[3];
@@ -648,9 +699,12 @@ try {
 						Log.i("failedPort",targetPort);
 						failedPort = Integer.parseInt(targetPort);
 
+						int tempPort = getRightPort(failedPort);
+
 						portsSortedList.remove(Integer.valueOf(failedPort));
 						REMOTE_PORTS.remove(Integer.valueOf(failedPort));
 						loadPortPos();
+
 						for(int port:REMOTE_PORTS){
 							try{
 								clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),port);
@@ -659,6 +713,21 @@ try {
 							}catch (Exception ex){
 							}
 						}
+
+						try{
+
+							clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), tempPort);
+							pw = new PrintWriter(clientSocket.getOutputStream(), true);
+							dis = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+							clientSocket.setSoTimeout(100);
+							pw.println("insert:"+key+":"+value);
+							res = dis.readLine();
+							clientSocket.close();
+
+						}catch (Exception e){
+
+						}
+
 					}
 				} catch (Exception e) {
 					Log.i("clientException","socket timeout "+targetPort);
@@ -678,16 +747,17 @@ try {
 					BufferedReader dis = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
 					Log.i("replication","replication:"+key+":"+value+":"+Integer.toString(replicationCount)+"targetPort:"+Integer.toString(targetPort));
 					pw.println("replication:"+key+":"+value+":"+Integer.toString(replicationCount));
-					pw.println("insert:"+key+":"+value);
 					String res = dis.readLine();
 					clientSocket.close();
 					Log.i("dis","dis:"+targetPort+":"+res);
 					if(res == null && failedPort ==0){
 						failedPort = targetPort;
 
+						int tempPort = getRightPort(failedPort);
+
 						portsSortedList.remove(Integer.valueOf(failedPort));
 						REMOTE_PORTS.remove(Integer.valueOf(failedPort));
-
+						loadPortPos();
 						for(int port:REMOTE_PORTS){
 							try{
 								clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),port);
@@ -695,6 +765,20 @@ try {
 								pw.println("failedPort:"+Integer.toString(failedPort));
 							}catch (Exception ex){
 							}
+						}
+
+						try{
+
+							clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), tempPort);
+							pw = new PrintWriter(clientSocket.getOutputStream(), true);
+							dis = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+							clientSocket.setSoTimeout(100);
+							pw.println("replication:"+key+":"+value+":"+Integer.toString(replicationCount));
+							res = dis.readLine();
+							clientSocket.close();
+
+						}catch (Exception e){
+
 						}
 					}
 
@@ -854,6 +938,19 @@ try {
 							Log.i("cursor key",key1);
 							Log.i("cursor value",value);
 							ds.println(value);
+
+						}
+						else if(msg.contains("rearrange")){
+							ds.println("done");
+							recoveredPort = Integer.parseInt(msg.split(":")[1]);
+							failedPort = 0;
+							loadPorts();
+							loadPortPos();
+							Log.i("recoveredPort",Integer.toString(recoveredPort));
+							Log.i("recoveredPort right",Integer.toString(rightPort));
+							if(rightPort!=recoveredPort){
+								delete(getUri(),"trim",null);
+							}
 
 						}
 						else if(msg.contains("queryAll")){
