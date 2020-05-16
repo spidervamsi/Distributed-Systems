@@ -505,28 +505,29 @@ public class SimpleDynamoProvider extends ContentProvider {
 					BufferedReader dis = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
 					clientSocket.setSoTimeout(100);
 					pw.println("insert:"+key+":"+value);
-//					dis.readLine();
+					Log.i("dis","dis"+dis.readLine());
+					clientSocket.close();
 				} catch (Exception e) {
 					Log.i("clientException","socket timeout "+targetPort);
-					if(failedPort==0){
-						failedPort = Integer.parseInt(targetPort);
-						Log.i("failedPort",Integer.toString(failedPort));
-						portsSortedList.remove(Integer.valueOf(failedPort));
-						REMOTE_PORTS.remove(Integer.valueOf(failedPort));
-
-						for(int port:REMOTE_PORTS){
-							try{
-								clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),port);
-								PrintWriter pw = new PrintWriter(clientSocket.getOutputStream(), true);
-								pw.println("failedPort:"+Integer.toString(failedPort));
-							}catch (Exception ex){
-
-							}
-
-						}
-
-
-					}
+//					if(failedPort==0){
+//						failedPort = Integer.parseInt(targetPort);
+//						Log.i("failedPort",Integer.toString(failedPort));
+//						portsSortedList.remove(Integer.valueOf(failedPort));
+//						REMOTE_PORTS.remove(Integer.valueOf(failedPort));
+//
+//						for(int port:REMOTE_PORTS){
+//							try{
+//								clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),port);
+//								PrintWriter pw = new PrintWriter(clientSocket.getOutputStream(), true);
+//								pw.println("failedPort:"+Integer.toString(failedPort));
+//							}catch (Exception ex){
+//
+//							}
+//
+//						}
+//
+//
+//					}
 
 
 				}
@@ -544,7 +545,8 @@ public class SimpleDynamoProvider extends ContentProvider {
 					BufferedReader dis = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
 					Log.i("replication","replication:"+key+":"+value+":"+Integer.toString(replicationCount)+"targetPort:"+Integer.toString(targetPort));
 					pw.println("replication:"+key+":"+value+":"+Integer.toString(replicationCount));
-
+					Log.i("dis","dis"+dis.readLine());
+					clientSocket.close();
 				} catch (IOException e) {
 					e.printStackTrace();
 				}
@@ -675,9 +677,8 @@ public class SimpleDynamoProvider extends ContentProvider {
 							ContentValues contentValues = new ContentValues();
 							contentValues.put("key",key);
 							contentValues.put("value",value);
+							ds.println("done");
 							insert(getUri(),contentValues);
-//							ds.println("done");
-                            socket.close();
 						}else if(msg.contains("replication")){
 
 							String key = msg.split(":")[1];
@@ -687,8 +688,9 @@ public class SimpleDynamoProvider extends ContentProvider {
 							contentValues.put("key",key);
 							contentValues.put("value",value);
 							contentValues.put("replication",replicationCount);
+							ds.println("done");
 							insert(getUri(),contentValues);
-							socket.close();
+//							socket.close();
 						}else if(msg.contains("failedPort")){
 							failedPort = Integer.parseInt(msg.split(":")[1]);
 							Log.i("serverFailedPort",Integer.toString(failedPort));
