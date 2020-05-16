@@ -164,13 +164,13 @@ public class SimpleDynamoProvider extends ContentProvider {
 				Log.i("length key",msgs[i]);
 				Log.i("length value",msgs[i+1]);
 				String key = msgs[i];
-				int replicationCount = 0;
+				boolean replication = true;
 				if(continueOrNot(key,myPort,leftPort)){
-					replicationCount = 2;
+					replication = false;
 				}else if(continueOrNot(key,b1,l1)){
-					replicationCount = 1;
+					replication = false;
 				}else if (continueOrNot(key,b2,l2)){
-					replicationCount = 0;
+					replication = false;
 				}else{
 					continue;
 				}
@@ -184,9 +184,9 @@ public class SimpleDynamoProvider extends ContentProvider {
 					FileOutputStream fos = context.openFileOutput(filename, Context.MODE_PRIVATE);
 					fos.write(val.getBytes());
 					fos.close();
-					if(replicationCount!=0){
-						new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR, "replication", key, val, Integer.toString(replicationCount));
-					}
+//					if(replication){
+//						new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR, "replication", key, val);
+//					}
 
 				} catch (Exception e) {
 					e.printStackTrace();
@@ -345,8 +345,6 @@ try {
 			cursor = (MatrixCursor) fetchLocal();
 		}else if(selection.contains("*")){
 			cursor = (MatrixCursor) fetchAll();
-		}else if(selection.contains("original")){
-			cursor = (MatrixCursor) fetchOriginal();
 		}
 		else{
 			cursor  = (MatrixCursor) fetch(selection);
@@ -731,16 +729,24 @@ try {
 						contentValues.put("store","store");
 						insert(getUri(),contentValues);
 
-//						try{
-//
-//							clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), getRightPort(failedPort));
-//							pw = new PrintWriter(clientSocket.getOutputStream(), true);
-//							dis = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
-//							pw.println("replication:"+key+":"+value+":2");
-//							res = dis.readLine();
-//							clientSocket.close();
-//
-//						}catch (Exception e){}
+						ArrayList<Integer> targetPorts = new ArrayList<Integer>();
+						targetPorts.add(getRightPort(failedPort));
+						targetPorts.add(getRightPort(targetPorts.get(0)));
+
+						for(int repPort:targetPorts){
+							try {
+
+								clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), repPort);
+								pw = new PrintWriter(clientSocket.getOutputStream(), true);
+								dis = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+								pw.println("replication:"+key+":"+value);
+								res = dis.readLine();
+								clientSocket.close();
+
+							} catch (Exception e) {
+								Log.i("replication error",e.getMessage());
+							}
+						}
 
 					}
 				} catch (Exception e) {
@@ -766,8 +772,8 @@ try {
 						String res = dis.readLine();
 						clientSocket.close();
 
-					} catch (IOException e) {
-						e.printStackTrace();
+					} catch (Exception e) {
+						Log.i("replication error",e.getMessage());
 					}
 				}
 
