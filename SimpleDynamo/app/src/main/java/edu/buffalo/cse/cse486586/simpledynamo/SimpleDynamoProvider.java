@@ -729,6 +729,8 @@ try {
 						contentValues.put("store","store");
 						insert(getUri(),contentValues);
 
+
+
 						ArrayList<Integer> targetPorts = new ArrayList<Integer>();
 						targetPorts.add(getRightPort(failedPort));
 						targetPorts.add(getRightPort(targetPorts.get(0)));
@@ -796,8 +798,20 @@ try {
 					BufferedReader dis = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
 					String value = dis.readLine();
 					Log.i("Client key",key);
-					Log.i("Client value",value);
+//					Log.i("Client value",value);
 					clientSocket.close();
+
+					if(value == null){
+						clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), getRightPort(Integer.parseInt(targetPort)));
+						pw = new PrintWriter(clientSocket.getOutputStream(), true);
+						pw.println("single:"+key);
+						pw.flush();
+						dis = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+						value = dis.readLine();
+					}
+
+
+
 					return value;
 
 				}catch (Exception e){
@@ -821,7 +835,10 @@ try {
 						BufferedReader dis = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
 						String value = dis.readLine();
 						clientSocket.close();
-						msgRec = msgRec + value;
+						if(value != null){
+							msgRec = msgRec + value;
+						}
+
 					} catch (Exception e) {
 						Log.i("Excpetion QueryAll", e.getMessage());
 						e.printStackTrace();
