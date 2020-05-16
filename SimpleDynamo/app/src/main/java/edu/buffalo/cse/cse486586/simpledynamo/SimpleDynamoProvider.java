@@ -57,6 +57,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 	int myPort,leftPort=0,rightPort=0;
 	int count = 0;
 	int firstPort = 11108;
+	int failedPort = 0;
 	ArrayList<Integer> REMOTE_PORTS = new ArrayList<Integer>(Arrays.asList(11108,11112,11116,11120,11124));
 	ArrayList<Integer> portsSortedList = new ArrayList<Integer>();
 
@@ -120,19 +121,14 @@ public class SimpleDynamoProvider extends ContentProvider {
 	public Uri insert(Uri uri, ContentValues values) {
 		int replicationCount = 0;
 		try {
-
+			int targetPort = findMatch(values.get("key").toString());
 			if(values.containsKey("replication")){
 				replicationCount = Integer.parseInt(values.get("replication").toString());
 			}
-			else if(!continueOrNot(values.get("key").toString())){
-				Log.i("return",values.get("key").toString());
-				int targetPort = findMatch(values.get("key").toString());
-				Log.i("cursor",Integer.toString(targetPort));
+			else if(targetPort!=myPort){
 				new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR,"insert", values.get("key").toString(),values.get("value").toString(),Integer.toString(targetPort));
 				return  uri;
 			}
-
-
 
 			Log.i("inserted", values.get("key").toString());
 			String filename = values.get("key").toString()+".txt";
@@ -301,37 +297,11 @@ public class SimpleDynamoProvider extends ContentProvider {
 //            s1>s2 -> +2
 	private boolean continueOrNot(String msg){
 // Needs work
-		try{
-			if(rightPort == 0){
-				return true;
-			}
-
-			if(myPort == 11124){
-
-				if(genHash(msg).compareTo(genHash(Integer.toString(myPort/2))) <= 0 || genHash(msg).compareToIgnoreCase(genHash(Integer.toString(leftPort/2))) > 0){
-					count++;
-					return true;
-				}else{
-					return false;
-
-
-
-				}
-			}
-
-//            genHash(Integer.toString(myPort)).compareToIgnoreCase(genHash(msg)) < 0 && genHash(Integer.toString(myPort+2)).compareToIgnoreCase(genHash(msg)) >0
-			if(genHash(msg).compareTo(genHash(Integer.toString(myPort/2))) <= 0 && genHash(msg).compareToIgnoreCase(genHash(Integer.toString(leftPort/2))) > 0){
-				count++;
-				return true;
-			}else{
-				return false;
-			}
-
-		}catch (Exception e){
-			Log.i("Exception", e.getMessage());
+		if(myPort == findMatch(msg)){
+			return true;
+		}else {
+			return false;
 		}
-
-		return false;
 	}
 
 
@@ -391,9 +361,9 @@ public class SimpleDynamoProvider extends ContentProvider {
 
 		MatrixCursor globalCursor= new MatrixCursor(new String[]{"key","value"});
 		String msg="";
-		if(rightPort == 0){
-			return fetchLocal();
-		}
+//		if(rightPort == 0){
+//			return fetchLocal();
+//		}
 		try {
 			msg = new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR,"queryAll").get();
 		}catch (Exception e) {
@@ -514,9 +484,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 					leftPort = Integer.parseInt(left_right.split(":")[0]);
 					rightPort = Integer.parseInt(left_right.split(":")[1]);
 
-					Log.i("Target ports",Integer.toString(leftPort));
-					Log.i("Target my ports",Integer.toString(myPort));
-					Log.i("Target ports",Integer.toString(rightPort));
+
 
 				} catch (Exception e) {
 					leftPort = 0;
@@ -530,14 +498,37 @@ public class SimpleDynamoProvider extends ContentProvider {
 				String targetPort = msgs[3];
 
 				Socket clientSocket = null;
+				Log.i("insertClientTask",targetPort);
 				try {
 					clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(targetPort));
 					PrintWriter pw = new PrintWriter(clientSocket.getOutputStream(), true);
 					BufferedReader dis = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+					clientSocket.setSoTimeout(100);
 					pw.println("insert:"+key+":"+value);
+//					dis.readLine();
+				} catch (Exception e) {
+					Log.i("clientException","socket timeout "+targetPort);
+					if(failedPort==0){
+						failedPort = Integer.parseInt(targetPort);
+						Log.i("failedPort",Integer.toString(failedPort));
+						portsSortedList.remove(Integer.valueOf(failedPort));
+						REMOTE_PORTS.remove(Integer.valueOf(failedPort));
 
-				} catch (IOException e) {
-					e.printStackTrace();
+						for(int port:REMOTE_PORTS){
+							try{
+								clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),port);
+								PrintWriter pw = new PrintWriter(clientSocket.getOutputStream(), true);
+								pw.println("failedPort:"+Integer.toString(failedPort));
+							}catch (Exception ex){
+
+							}
+
+						}
+
+
+					}
+
+
 				}
 
 
@@ -545,7 +536,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 				String key = msgs[1];
 				String value = msgs[2];
 				int replicationCount  = Integer.parseInt(msgs[3]);
-				int targetPort = portsSortedList.get((myPortpos+1)%5);
+				int targetPort = portsSortedList.get((myPortpos+1)%portsSortedList.size());
 				try {
 					Socket clientSocket = null;
 					clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), targetPort);
@@ -685,6 +676,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 							contentValues.put("key",key);
 							contentValues.put("value",value);
 							insert(getUri(),contentValues);
+//							ds.println("done");
                             socket.close();
 						}else if(msg.contains("replication")){
 
@@ -696,6 +688,10 @@ public class SimpleDynamoProvider extends ContentProvider {
 							contentValues.put("value",value);
 							contentValues.put("replication",replicationCount);
 							insert(getUri(),contentValues);
+							socket.close();
+						}else if(msg.contains("failedPort")){
+							failedPort = Integer.parseInt(msg.split(":")[1]);
+							Log.i("serverFailedPort",Integer.toString(failedPort));
 							socket.close();
 						}
 						else if(msg.contains("single")){
