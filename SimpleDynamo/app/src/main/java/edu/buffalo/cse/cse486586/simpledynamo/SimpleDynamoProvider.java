@@ -146,40 +146,69 @@ public class SimpleDynamoProvider extends ContentProvider {
 	public Uri insert(Uri uri, ContentValues values) {
 
 
-		if(values.containsKey("rightport")){
+		if(values.containsKey("fetchAll")){
+//			int b0 = myPort;
+//			int l0 = getLeftPort(myPort);
+			int b1 = leftPort;
+			int l1 = getLeftPort(b1);
+			int b2 = l1;
+			int l2 = getLeftPort(b2);
+
+
+			Log.i("connectback","fetchAll");
 			String msg = values.get("value").toString();
 			String msgs[] = msg.split(":");
-			Log.i("length",Integer.toString(msgs.length));
+			Log.i("connectback","count"+Integer.toString(msgs.length));
+
 			for(int i=1;i<msgs.length;i = i+2){
 				Log.i("length key",msgs[i]);
 				Log.i("length value",msgs[i+1]);
 				String key = msgs[i];
-				String value = msgs[i+1];
+				int replicationCount = 0;
+				if(continueOrNot(key,myPort,leftPort)){
+					replicationCount = 2;
+				}else if(continueOrNot(key,b1,l1)){
+					replicationCount = 1;
+				}else if (continueOrNot(key,b2,l2)){
+					replicationCount = 0;
+				}else{
+					continue;
+				}
 
-				try {
+				try{
 					String filename = key + ".txt";
+					String val = msgs[i+1];
+
 					File file = new File(context.getFilesDir(), filename);
 
 					FileOutputStream fos = context.openFileOutput(filename, Context.MODE_PRIVATE);
-					fos.write(value.getBytes());
+					fos.write(val.getBytes());
 					fos.close();
+					if(replicationCount!=0){
+						new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR, "replication", key, val, Integer.toString(replicationCount));
+					}
+
 				} catch (Exception e) {
 					e.printStackTrace();
 					Log.i("file", "can not write to file");
 				}
+
+
 
 			}
 
 		}else {
 
 
-			int replicationCount = 0;
+			boolean replication = true;
 			try {
 
 				int targetPort = findMatch(values.get("key").toString());
 				if (values.containsKey("replication")) {
-					replicationCount = Integer.parseInt(values.get("replication").toString());
-				} else if (targetPort != myPort) {
+					replication = false;
+				} else if( values.containsKey("store")){
+					replication = false;
+				}else if (targetPort != myPort) {
 					new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR, "insert", values.get("key").toString(), values.get("value").toString(), Integer.toString(targetPort));
 					return uri;
 				}
@@ -193,16 +222,20 @@ public class SimpleDynamoProvider extends ContentProvider {
 				FileOutputStream fos = context.openFileOutput(filename, Context.MODE_PRIVATE);
 				fos.write(msg.getBytes());
 				fos.close();
+				if(replication){
+					new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR, "replication", values.get("key").toString(), values.get("value").toString());
+				}
+
 			} catch (Exception e) {
 				e.printStackTrace();
 				Log.i("file", "can not write to file");
 			}
 
-			if (replicationCount == 0) {
-				new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR, "replication", values.get("key").toString(), values.get("value").toString(), "2");
-			} else if (replicationCount == 2) {
-				new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR, "replication", values.get("key").toString(), values.get("value").toString(), "1");
-			}
+//			if (replicationCount == 0) {
+//				new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR, "replication", values.get("key").toString(), values.get("value").toString(), "2");
+//			} else if (replicationCount == 2) {
+//				new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR, "replication", values.get("key").toString(), values.get("value").toString(), "1");
+//			}
 
 
 //
@@ -464,6 +497,8 @@ try {
 
 	public MatrixCursor fetchAll(){
 
+		Log.i("connectback","fetchAll function");
+
 		MatrixCursor globalCursor= new MatrixCursor(new String[]{"key","value"});
 		String msg="";
 		try {
@@ -640,42 +675,35 @@ try {
 				}
 
 				if(recoveredPort == myPort){
+					failedPort = 0;
+					recoveredPort = 0;
 					Log.i("connectback","connectback");
-					int targetPort = rightPort;
+
+					String msgRec="";
+					for(Integer targetPort : REMOTE_PORTS){
+						if(targetPort == myPort){continue;}
 						Socket clientSocket = null;
 						try {
 							clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), targetPort);
 							PrintWriter pw = new PrintWriter(clientSocket.getOutputStream(), true);
-							pw.println("queryAll");
+							pw.println("queryTrim");
 							pw.flush();
 							BufferedReader dis = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
 							String value = dis.readLine();
 							clientSocket.close();
-
-							ContentValues contentValues = new ContentValues();
-							contentValues.put("rightport","rightport");
-							contentValues.put("value",value);
-
-							insert(getUri(),contentValues);
+							msgRec = msgRec + value;
 						} catch (Exception e) {
 							Log.i("Excpetion QueryAll", e.getMessage());
 							e.printStackTrace();
 						}
 
-						for(int port: REMOTE_PORTS){
-							try {
-								clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), port);
-								PrintWriter pw = new PrintWriter(clientSocket.getOutputStream(), true);
-								pw.println("rearrange:"+Integer.toString(recoveredPort));
-								pw.flush();
-								BufferedReader dis = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
-								String value = dis.readLine();
-								clientSocket.close();
-							} catch (Exception e) {
-								Log.i("Excpetion queryOriginal", e.getMessage());
-								e.printStackTrace();
-							}
-						}
+					}
+					ContentValues contentValues = new ContentValues();
+					contentValues.put("fetchAll","fetchAll");
+					contentValues.put("value",msgRec);
+					insert(getUri(),contentValues);
+
+
 
 				}
 			}
@@ -695,38 +723,24 @@ try {
 					String res = dis.readLine();
 					clientSocket.close();
 					Log.i("dis","dis:"+targetPort+":"+res);
-					if(res == null && failedPort ==0){
-						Log.i("failedPort",targetPort);
+					if(res == null){
 						failedPort = Integer.parseInt(targetPort);
+						ContentValues contentValues = new ContentValues();
+						contentValues.put("key",key);
+						contentValues.put("value",value);
+						contentValues.put("store","store");
+						insert(getUri(),contentValues);
 
-						int tempPort = getRightPort(failedPort);
-
-						portsSortedList.remove(Integer.valueOf(failedPort));
-						REMOTE_PORTS.remove(Integer.valueOf(failedPort));
-						loadPortPos();
-
-						for(int port:REMOTE_PORTS){
-							try{
-								clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),port);
-								pw = new PrintWriter(clientSocket.getOutputStream(), true);
-								pw.println("failedPort:"+Integer.toString(failedPort));
-							}catch (Exception ex){
-							}
-						}
-
-						try{
-
-							clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), tempPort);
-							pw = new PrintWriter(clientSocket.getOutputStream(), true);
-							dis = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
-							clientSocket.setSoTimeout(100);
-							pw.println("insert:"+key+":"+value);
-							res = dis.readLine();
-							clientSocket.close();
-
-						}catch (Exception e){
-
-						}
+//						try{
+//
+//							clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), getRightPort(failedPort));
+//							pw = new PrintWriter(clientSocket.getOutputStream(), true);
+//							dis = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+//							pw.println("replication:"+key+":"+value+":2");
+//							res = dis.readLine();
+//							clientSocket.close();
+//
+//						}catch (Exception e){}
 
 					}
 				} catch (Exception e) {
@@ -738,54 +752,26 @@ try {
 			}else  if(msgs[0].contains("replication")){
 				String key = msgs[1];
 				String value = msgs[2];
-				int replicationCount  = Integer.parseInt(msgs[3]);
-				int targetPort = portsSortedList.get((myPortpos+1)%portsSortedList.size());
-				try {
-					Socket clientSocket = null;
-					clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), targetPort);
-					PrintWriter pw = new PrintWriter(clientSocket.getOutputStream(), true);
-					BufferedReader dis = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
-					Log.i("replication","replication:"+key+":"+value+":"+Integer.toString(replicationCount)+"targetPort:"+Integer.toString(targetPort));
-					pw.println("replication:"+key+":"+value+":"+Integer.toString(replicationCount));
-					String res = dis.readLine();
-					clientSocket.close();
-					Log.i("dis","dis:"+targetPort+":"+res);
-					if(res == null && failedPort ==0){
-						failedPort = targetPort;
+				ArrayList<Integer> targetPorts = new ArrayList<Integer>();
+				targetPorts.add(getRightPort(myPort));
+				targetPorts.add(getRightPort(targetPorts.get(0)));
 
-						int tempPort = getRightPort(failedPort);
+				for(int targetPort:targetPorts){
+					try {
+						Socket clientSocket = null;
+						clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), targetPort);
+						PrintWriter pw = new PrintWriter(clientSocket.getOutputStream(), true);
+						BufferedReader dis = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+						pw.println("replication:"+key+":"+value);
+						String res = dis.readLine();
+						clientSocket.close();
 
-						portsSortedList.remove(Integer.valueOf(failedPort));
-						REMOTE_PORTS.remove(Integer.valueOf(failedPort));
-						loadPortPos();
-						for(int port:REMOTE_PORTS){
-							try{
-								clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),port);
-								pw = new PrintWriter(clientSocket.getOutputStream(), true);
-								pw.println("failedPort:"+Integer.toString(failedPort));
-							}catch (Exception ex){
-							}
-						}
-
-						try{
-
-							clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), tempPort);
-							pw = new PrintWriter(clientSocket.getOutputStream(), true);
-							dis = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
-							clientSocket.setSoTimeout(100);
-							pw.println("replication:"+key+":"+value+":"+Integer.toString(replicationCount));
-							res = dis.readLine();
-							clientSocket.close();
-
-						}catch (Exception e){
-
-						}
+					} catch (IOException e) {
+						e.printStackTrace();
 					}
-
-
-				} catch (IOException e) {
-					e.printStackTrace();
 				}
+
+
 
 
 			}
@@ -889,14 +875,17 @@ try {
 						String msg = in.readLine();
 
 						if(msg.contains("connect")){
+							int port = Integer.parseInt(msg.split(":")[1]);
 
-							if(failedPort==0){
+							Log.i("connect failedport",Integer.toString(failedPort));
+
+							if(failedPort != port){
 								ds.println("normal");
 							}else{
 								failedPort = 0;
-								recoveredPort = Integer.parseInt(msg.split(":")[1]);
-								loadPorts();
-								loadPortPos();
+//								recoveredPort = Integer.parseInt(msg.split(":")[1]);
+//								loadPorts();
+//								loadPortPos();
 								ds.println("connectback");
 							}
 
@@ -914,11 +903,10 @@ try {
 
 							String key = msg.split(":")[1];
 							String value = msg.split(":")[2];
-							String replicationCount = msg.split(":")[3];
 							ContentValues contentValues = new ContentValues();
 							contentValues.put("key",key);
 							contentValues.put("value",value);
-							contentValues.put("replication",replicationCount);
+							contentValues.put("replication","replication");
 							ds.println("done");
 							insert(getUri(),contentValues);
 //							socket.close();
@@ -951,6 +939,26 @@ try {
 							if(rightPort!=recoveredPort){
 								delete(getUri(),"trim",null);
 							}
+
+						} else if(msg.contains("queryTrim")){
+
+							MatrixCursor cursor = (MatrixCursor) fetchLocal();
+							String msgToSend = "";
+
+							Log.i("length count",Integer.toString(cursor.getCount()));
+
+							cursor.moveToFirst();
+							do{
+								String key = cursor.getString(cursor.getColumnIndex("key"));
+								String value = cursor.getString(cursor.getColumnIndex("value"));
+								msgToSend = msgToSend+":"+key+":"+value;
+								Log.i("queryAll cursor",key);
+
+							}while(cursor.moveToNext());
+
+							ds.println(msgToSend);
+
+							delete(getUri(),"trim",null);
 
 						}
 						else if(msg.contains("queryAll")){
