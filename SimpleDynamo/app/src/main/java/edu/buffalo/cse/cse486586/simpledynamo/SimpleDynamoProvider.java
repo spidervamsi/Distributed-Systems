@@ -58,6 +58,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 	int count = 0;
 	int firstPort = 11108;
 	int failedPort = 0;
+	int recoveredPort = 0;
 	ArrayList<Integer> REMOTE_PORTS = new ArrayList<Integer>(Arrays.asList(11108,11112,11116,11120,11124));
 	ArrayList<Integer> portsSortedList = new ArrayList<Integer>();
 
@@ -119,40 +120,69 @@ public class SimpleDynamoProvider extends ContentProvider {
 
 	@Override
 	public Uri insert(Uri uri, ContentValues values) {
-		int replicationCount = 0;
-		try {
-			int targetPort = findMatch(values.get("key").toString());
-			if(values.containsKey("replication")){
-				replicationCount = Integer.parseInt(values.get("replication").toString());
-			}
-			else if(targetPort!=myPort){
-				new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR,"insert", values.get("key").toString(),values.get("value").toString(),Integer.toString(targetPort));
-				return  uri;
-			}
 
-			Log.i("inserted", values.get("key").toString());
-			String filename = values.get("key").toString()+".txt";
+
+		if(values.containsKey("rightport")){
 			String msg = values.get("value").toString();
+			String msgs[] = msg.split(":");
 
-			File file = new File(context.getFilesDir(), filename);
+			for(int i=1;i<msgs.length;i = i+2){
+				Log.i("length key",msgs[i]);
+				Log.i("length value",msgs[i+1]);
+				String key = msgs[i];
+				String value = msgs[i+1];
 
-			FileOutputStream fos = context.openFileOutput(filename, Context.MODE_PRIVATE);
-			fos.write(msg.getBytes());
-			fos.close();
-		} catch (Exception e) {
-			e.printStackTrace();
-			Log.i("file","can not write to file");
-		}
+				try {
+					String filename = key + ".txt";
+					File file = new File(context.getFilesDir(), filename);
 
-		if(replicationCount == 0){
-			new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR,"replication", values.get("key").toString(),values.get("value").toString(),"2");
-		}else if(replicationCount == 2) {
-			new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR,"replication", values.get("key").toString(),values.get("value").toString(),"1");
-		}
+					FileOutputStream fos = context.openFileOutput(filename, Context.MODE_PRIVATE);
+					fos.write(msg.getBytes());
+					fos.close();
+				} catch (Exception e) {
+					e.printStackTrace();
+					Log.i("file", "can not write to file");
+				}
+
+			}
+
+		}else {
+
+
+			int replicationCount = 0;
+			try {
+
+				int targetPort = findMatch(values.get("key").toString());
+				if (values.containsKey("replication")) {
+					replicationCount = Integer.parseInt(values.get("replication").toString());
+				} else if (targetPort != myPort) {
+					new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR, "insert", values.get("key").toString(), values.get("value").toString(), Integer.toString(targetPort));
+					return uri;
+				}
+
+				Log.i("inserted", values.get("key").toString());
+				String filename = values.get("key").toString() + ".txt";
+				String msg = values.get("value").toString();
+
+				File file = new File(context.getFilesDir(), filename);
+
+				FileOutputStream fos = context.openFileOutput(filename, Context.MODE_PRIVATE);
+				fos.write(msg.getBytes());
+				fos.close();
+			} catch (Exception e) {
+				e.printStackTrace();
+				Log.i("file", "can not write to file");
+			}
+
+			if (replicationCount == 0) {
+				new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR, "replication", values.get("key").toString(), values.get("value").toString(), "2");
+			} else if (replicationCount == 2) {
+				new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR, "replication", values.get("key").toString(), values.get("value").toString(), "1");
+			}
 
 
 //
-
+		}
 		return uri;
 	}
 
@@ -564,10 +594,39 @@ try {
 						pw.println("connect:" + Integer.toString(myPort));
 						String res = dis.readLine();
 						clientSocket.close();
+						if(res == "connectback"){
+							recoveredPort = myPort;
+							break;
+						}
 						Log.i("connect","connect "+res);
 					} catch (Exception e) {
 						e.printStackTrace();
 					}
+				}
+
+				if(recoveredPort == myPort){
+					int targetPort = rightPort;
+						Socket clientSocket = null;
+						try {
+							clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), targetPort);
+							PrintWriter pw = new PrintWriter(clientSocket.getOutputStream(), true);
+							pw.println("queryAll");
+							pw.flush();
+							BufferedReader dis = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+							String value = dis.readLine();
+							clientSocket.close();
+
+							ContentValues contentValues = new ContentValues();
+							contentValues.put("rightport","rightport");
+							contentValues.put("value",value);
+
+							insert(getUri(),contentValues);
+						} catch (Exception e) {
+							Log.i("Excpetion QueryAll", e.getMessage());
+							e.printStackTrace();
+						}
+//					return msgRec;
+
 				}
 			}else if(msgs[0].contains("insert")){
 				String key = msgs[1];
@@ -591,7 +650,7 @@ try {
 
 						portsSortedList.remove(Integer.valueOf(failedPort));
 						REMOTE_PORTS.remove(Integer.valueOf(failedPort));
-
+						loadPortPos();
 						for(int port:REMOTE_PORTS){
 							try{
 								clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),port);
@@ -750,6 +809,10 @@ try {
 							if(failedPort==0){
 								ds.println("normal");
 							}else{
+								failedPort = 0;
+								recoveredPort = Integer.parseInt(msg.split(":")[1]);
+								loadPorts();
+								loadPortPos();
 								ds.println("connectback");
 							}
 
