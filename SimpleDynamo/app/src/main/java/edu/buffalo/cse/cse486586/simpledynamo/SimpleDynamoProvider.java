@@ -71,31 +71,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 		String contents = "";
 		try {
 
-			if(selection.equals("trim")){
-				int b1 = leftPort;
-				int l1 = getLeftPort(b1);
-				int b2 = l1;
-				int l2 = getLeftPort(b2);
-
-				String[] filenames = context.fileList();
-				for(String filename: filenames){
-					String msg = filename.split(".txt")[0];
-					if(continueOrNot(msg,myPort,leftPort)){
-						continue;
-					}else if(continueOrNot(msg,b1,l1)){
-						continue;
-					}else if(continueOrNot(msg,b2,l2)){
-						continue;
-					}else{
-						context.deleteFile(filename);
-						Log.i("delete","delete");
-					}
-
-				}
-
-
-			}
-			else if(selection.equals("@")){
+			if(selection.equals("@")){
 
 				String[] filenames = context.fileList();
 				for(String filename: filenames){
@@ -184,9 +160,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 					FileOutputStream fos = context.openFileOutput(filename, Context.MODE_PRIVATE);
 					fos.write(val.getBytes());
 					fos.close();
-//					if(replication){
-//						new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR, "replication", key, val);
-//					}
+
 
 				} catch (Exception e) {
 					e.printStackTrace();
@@ -723,13 +697,6 @@ try {
 					Log.i("dis","dis:"+targetPort+":"+res);
 					if(res == null){
 						failedPort = Integer.parseInt(targetPort);
-						ContentValues contentValues = new ContentValues();
-						contentValues.put("key",key);
-						contentValues.put("value",value);
-						contentValues.put("store","store");
-						insert(getUri(),contentValues);
-
-
 
 						ArrayList<Integer> targetPorts = new ArrayList<Integer>();
 						targetPorts.add(getRightPort(failedPort));
@@ -951,19 +918,7 @@ try {
 							ds.println(value);
 
 						}
-						else if(msg.contains("rearrange")){
-							ds.println("done");
-							recoveredPort = Integer.parseInt(msg.split(":")[1]);
-							failedPort = 0;
-							loadPorts();
-							loadPortPos();
-							Log.i("recoveredPort",Integer.toString(recoveredPort));
-							Log.i("recoveredPort right",Integer.toString(rightPort));
-							if(rightPort!=recoveredPort){
-								delete(getUri(),"trim",null);
-							}
-
-						} else if(msg.contains("queryTrim")){
+						else if(msg.contains("queryTrim")){
 
 							MatrixCursor cursor = (MatrixCursor) fetchLocal();
 							String msgToSend = "";
