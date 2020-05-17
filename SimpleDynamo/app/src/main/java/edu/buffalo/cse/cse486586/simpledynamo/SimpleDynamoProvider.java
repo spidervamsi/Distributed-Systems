@@ -662,10 +662,6 @@ try {
 						Log.i("replication error",e.getMessage());
 					}
 				}
-
-
-
-
 			}
 			else  if(msgs[0].contains("single")){
 				globalCursor =  new MatrixCursor(new String[]{"key","value"});
