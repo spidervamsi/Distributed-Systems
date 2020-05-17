@@ -155,7 +155,7 @@ public class SimpleDhtProvider extends ContentProvider {
 
     @Override
     public Cursor query(Uri uri, String[] projection, String selection, String[] selectionArgs,
-            String sortOrder) {
+                        String sortOrder) {
 
         MatrixCursor cursor;
 
@@ -187,7 +187,7 @@ public class SimpleDhtProvider extends ContentProvider {
         return formatter.toString();
     }
 
-//     s1.compare(s2)
+    //     s1.compare(s2)
 //        s1<s2 -> -2
 //        s1>s2 -> +2
     public int findMatch(String msg){
@@ -214,7 +214,7 @@ public class SimpleDhtProvider extends ContentProvider {
 
         return 0;
     }
-//           s1.compare(s2)
+    //           s1.compare(s2)
 //            s1<s2 -> -2
 //            s1>s2 -> +2
     private boolean continueOrNot(String msg){
@@ -235,12 +235,12 @@ public class SimpleDhtProvider extends ContentProvider {
                 }
             }
 
-        if(genHash(msg).compareTo(genHash(Integer.toString(myPort/2))) <= 0 && genHash(msg).compareToIgnoreCase(genHash(Integer.toString(leftPort/2))) > 0){
-            count++;
-            return true;
-        }else{
-            return false;
-        }
+            if(genHash(msg).compareTo(genHash(Integer.toString(myPort/2))) <= 0 && genHash(msg).compareToIgnoreCase(genHash(Integer.toString(leftPort/2))) > 0){
+                count++;
+                return true;
+            }else{
+                return false;
+            }
 
         }catch (Exception e){
             Log.i("Exception", e.getMessage());
@@ -354,7 +354,7 @@ public class SimpleDhtProvider extends ContentProvider {
         return cursor;
     }
 
-//    /////////////////// Async Tasks Start ////////////////////////////////////////
+    //    /////////////////// Async Tasks Start ////////////////////////////////////////
     private class ClientTask extends AsyncTask<String, Void, String> {
 
         @Override
@@ -379,16 +379,16 @@ public class SimpleDhtProvider extends ContentProvider {
                     int index = ports.indexOf(Integer.toString(myPort));
 
 
-                         if (index == 0) {
-                            right = ports.get(1);
-                            left = ports.get(ports.size() - 1);
-                        }else if (index == ports.size() - 1) {
+                    if (index == 0) {
+                        right = ports.get(1);
+                        left = ports.get(ports.size() - 1);
+                    }else if (index == ports.size() - 1) {
                         right = ports.get(0);
                         left = ports.get(index - 1);
-                        } else {
-                            right = ports.get(index + 1);
-                            left = ports.get(index - 1);
-                        }
+                    } else {
+                        right = ports.get(index + 1);
+                        left = ports.get(index - 1);
+                    }
                     rightPort = Integer.parseInt(right);
                     leftPort = Integer.parseInt(left);
 
@@ -606,8 +606,8 @@ public class SimpleDhtProvider extends ContentProvider {
                             MatrixCursor cursor = (MatrixCursor) fetch(key);
 
                             cursor.moveToFirst();
-                                String key1 = cursor.getString(cursor.getColumnIndex("key"));
-                                String value = cursor.getString(cursor.getColumnIndex("value"));
+                            String key1 = cursor.getString(cursor.getColumnIndex("key"));
+                            String value = cursor.getString(cursor.getColumnIndex("value"));
                             ds.println(value);
 
                         }
