@@ -205,12 +205,6 @@ public class SimpleDynamoProvider extends ContentProvider {
 				Log.i("file", "can not write to file");
 			}
 
-//			if (replicationCount == 0) {
-//				new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR, "replication", values.get("key").toString(), values.get("value").toString(), "2");
-//			} else if (replicationCount == 2) {
-//				new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR, "replication", values.get("key").toString(), values.get("value").toString(), "1");
-//			}
-
 
 //
 		}
@@ -491,73 +485,13 @@ try {
 		return globalCursor;
 	}
 
-
-	public MatrixCursor fetchOriginal(){
-
-		MatrixCursor cursor = new MatrixCursor(new String[]{"key","value"});
-
-
-		String[] filenames = context.fileList();
-		String contents = "";
-		for(String filename : filenames) {
-			String selection;
-			selection = filename.split(".txt")[0];
-
-//			if(!continueOrNot(selection)){
-//				continue;
-//			}
-
-
-			StringBuilder stringBuilder = new StringBuilder();
-			try {
-				FileInputStream fis;
-				fis = context.openFileInput(filename);
-				InputStreamReader inputStreamReader =
-						new InputStreamReader(fis, StandardCharsets.UTF_8);
-
-				BufferedReader reader = new BufferedReader(inputStreamReader);
-				String line = reader.readLine();
-				while (line != null) {
-					stringBuilder.append(line);
-					line = reader.readLine();
-				}
-
-			} catch (Exception e) {
-				e.printStackTrace();
-			} finally {
-				contents = stringBuilder.toString();
-			}
-
-			Log.i("path fetch key",selection);
-			Log.i("path fetch value",contents);
-
-//            testPosition(selection);
-
-			cursor.newRow()
-					.add("key", selection)
-					.add("value", contents);
-
-
-		}
-
-		if(contents==""){return null;}
-
-		return cursor;
-
-	}
-
-
-
-
-
-
-
 	public MatrixCursor fetchLocal(){
 
 		MatrixCursor cursor = new MatrixCursor(new String[]{"key","value"});
 
 
 		String[] filenames = context.fileList();
+		if(filenames.length == 0){return null;}
 		String contents = "";
 		for(String filename : filenames) {
 			StringBuilder stringBuilder = new StringBuilder();
@@ -625,31 +559,6 @@ try {
 			MatrixCursor globalCursor = null;
 			if(msgs[0].contains("connect")){
 
-				for(int port:REMOTE_PORTS) {
-					if(port==myPort){continue;}
-					try {
-						Socket clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), port);
-						PrintWriter pw = new PrintWriter(clientSocket.getOutputStream(), true);
-						BufferedReader dis = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
-						clientSocket.setSoTimeout(100);
-						pw.println("connect:" + Integer.toString(myPort));
-						String res = dis.readLine();
-						clientSocket.close();
-						if(res.contains("connectback")){
-							recoveredPort = myPort;
-							break;
-						}
-						Log.i("connect","connect "+res);
-					} catch (Exception e) {
-						e.printStackTrace();
-					}
-				}
-
-				if(recoveredPort == myPort){
-					failedPort = 0;
-					recoveredPort = 0;
-					Log.i("connectback","connectback");
-
 					ArrayList<Integer> tempPorts = new ArrayList<Integer>();
 					tempPorts.add(getLeftPort(myPort));
 					tempPorts.add(getLeftPort(tempPorts.get(0)));
@@ -666,21 +575,26 @@ try {
 							BufferedReader dis = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
 							String value = dis.readLine();
 							clientSocket.close();
-							msgRec = msgRec + value;
+
+							if(value!="empty"){
+								msgRec = msgRec + value;
+							}
+
+
 						} catch (Exception e) {
 							Log.i("Excpetion QueryAll", e.getMessage());
 							e.printStackTrace();
 						}
 
 					}
-					ContentValues contentValues = new ContentValues();
-					contentValues.put("fetchAll","fetchAll");
-					contentValues.put("value",msgRec);
-					insert(getUri(),contentValues);
+					if(msgRec!=""){
+						ContentValues contentValues = new ContentValues();
+						contentValues.put("fetchAll","fetchAll");
+						contentValues.put("value",msgRec);
+						insert(getUri(),contentValues);
+					}
 
 
-
-				}
 			}
 			else if(msgs[0].contains("insert")){
 				String key = msgs[1];
@@ -928,22 +842,24 @@ try {
 						else if(msg.contains("queryTrim")){
 
 							MatrixCursor cursor = (MatrixCursor) fetchLocal();
-							String msgToSend = "";
+							if(cursor==null){
+								ds.println("empty");
+							}else {
+								String msgToSend = "";
 
-							Log.i("length count",Integer.toString(cursor.getCount()));
+								Log.i("length count", Integer.toString(cursor.getCount()));
 
-							cursor.moveToFirst();
-							do{
-								String key = cursor.getString(cursor.getColumnIndex("key"));
-								String value = cursor.getString(cursor.getColumnIndex("value"));
-								msgToSend = msgToSend+":"+key+":"+value;
-								Log.i("queryAll cursor",key);
+								cursor.moveToFirst();
+								do {
+									String key = cursor.getString(cursor.getColumnIndex("key"));
+									String value = cursor.getString(cursor.getColumnIndex("value"));
+									msgToSend = msgToSend + ":" + key + ":" + value;
+									Log.i("queryAll cursor", key);
 
-							}while(cursor.moveToNext());
+								} while (cursor.moveToNext());
 
-							ds.println(msgToSend);
-
-							delete(getUri(),"trim",null);
+								ds.println(msgToSend);
+							}
 
 						}
 						else if(msg.contains("queryAll")){
