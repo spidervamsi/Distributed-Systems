@@ -137,16 +137,8 @@ public class SimpleDynamoProvider extends ContentProvider {
 			Log.i("connectback","count"+Integer.toString(msgs.length));
 
 			for(int i=1;i<msgs.length;i = i+2){
-				Log.i("length key",msgs[i]);
-				Log.i("length value",msgs[i+1]);
 				String key = msgs[i];
-				boolean replication = true;
-				if(continueOrNot(key,myPort,leftPort)){
-					replication = false;
-				}else if(continueOrNot(key,b1,l1)){
-					replication = false;
-				}else if (continueOrNot(key,b2,l2)){
-					replication = false;
+				if(continueOrNot(key,myPort,leftPort) || continueOrNot(key,b1,l1) || continueOrNot(key,b2,l2)){
 				}else{
 					continue;
 				}
@@ -187,6 +179,10 @@ public class SimpleDynamoProvider extends ContentProvider {
 					return uri;
 				}
 
+				if(replication){
+					new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR, "replication", values.get("key").toString(), values.get("value").toString());
+				}
+
 				Log.i("inserted", values.get("key").toString());
 				String filename = values.get("key").toString() + ".txt";
 				String msg = values.get("value").toString();
@@ -196,9 +192,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 				FileOutputStream fos = context.openFileOutput(filename, Context.MODE_PRIVATE);
 				fos.write(msg.getBytes());
 				fos.close();
-				if(replication){
-					new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR, "replication", values.get("key").toString(), values.get("value").toString());
-				}
+
 
 			} catch (Exception e) {
 				e.printStackTrace();
@@ -305,9 +299,7 @@ try {
 	@Override
 	public synchronized Cursor query(Uri uri, String[] projection, String selection, String[] selectionArgs,
 						String sortOrder) {
-//		try {
-//			Thread.sleep(250);
-//		}catch (Exception e){}
+
 		MatrixCursor cursor;
 		Log.i("path query",selection);
 
@@ -672,7 +664,7 @@ try {
 				String value=null;
 
 				try {
-					for(int i=0;i<2;i++){
+					for(int i=0;i<3;i++){
 						try{
 
 							if(targetPort==myPort){continue;}
@@ -682,14 +674,15 @@ try {
 							BufferedReader dis = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
 							pw.println("single:"+key);
 							pw.flush();
-							clientSocket.setSoTimeout(100);
 							String res = dis.readLine();
 							clientSocket.close();
 							if(res!=null){
 								value = res;
 								break;
 							}
-							Log.i("Client key",key);
+							try {
+								Thread.sleep(250);
+							}catch (Exception ee){}
 
 						}catch (Exception e){
 
@@ -824,14 +817,14 @@ try {
 						}
 						else if(msg.contains("single")){
 							String key = msg.split(":")[1];
-							Log.i("single server",key);
+//							Log.i("single server",key);
 							MatrixCursor cursor = (MatrixCursor) fetch(key);
 
 							cursor.moveToFirst();
 							String key1 = cursor.getString(cursor.getColumnIndex("key"));
 							String value = cursor.getString(cursor.getColumnIndex("value"));
-							Log.i("cursor key",key1);
-							Log.i("cursor value",value);
+//							Log.i("cursor key",key1);
+//							Log.i("cursor value",value);
 							ds.println(value);
 
 						}
