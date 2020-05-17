@@ -65,7 +65,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 	int myPortpos = 0;
 
 	@Override
-	public int delete(Uri uri, String selection, String[] selectionArgs) {
+	public synchronized int delete(Uri uri, String selection, String[] selectionArgs) {
 		// TODO Auto-generated method stub
 
 		String contents = "";
@@ -119,7 +119,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 	}
 
 	@Override
-	public Uri insert(Uri uri, ContentValues values) {
+	public synchronized Uri insert(Uri uri, ContentValues values) {
 
 
 		if(values.containsKey("fetchAll")){
@@ -309,9 +309,11 @@ try {
 
 
 	@Override
-	public Cursor query(Uri uri, String[] projection, String selection, String[] selectionArgs,
+	public synchronized Cursor query(Uri uri, String[] projection, String selection, String[] selectionArgs,
 						String sortOrder) {
-
+//		try {
+//			Thread.sleep(250);
+//		}catch (Exception e){}
 		MatrixCursor cursor;
 		Log.i("path query",selection);
 
@@ -480,10 +482,7 @@ try {
 
 		String msgs[] = msg.split(":");
 
-		Log.i("length",Integer.toString(msgs.length));
 		for(int i=1;i<msgs.length;i = i+2){
-			Log.i("length key",msgs[i]);
-			Log.i("length value",msgs[i+1]);
 			globalCursor.newRow()
 					.add("key", msgs[i])
 					.add("value", msgs[i+1]);
@@ -651,8 +650,12 @@ try {
 					recoveredPort = 0;
 					Log.i("connectback","connectback");
 
+					ArrayList<Integer> tempPorts = new ArrayList<Integer>();
+					tempPorts.add(getLeftPort(myPort));
+					tempPorts.add(getLeftPort(tempPorts.get(0)));
+					tempPorts.add(getRightPort(myPort));
 					String msgRec="";
-					for(Integer targetPort : REMOTE_PORTS){
+					for(Integer targetPort : tempPorts){
 						if(targetPort == myPort){continue;}
 						Socket clientSocket = null;
 						try {
@@ -753,32 +756,36 @@ try {
 			else  if(msgs[0].contains("single")){
 				globalCursor =  new MatrixCursor(new String[]{"key","value"});
 				String key = msgs[1];
-				String targetPort = msgs[2];
+				int targetPort = Integer.parseInt(msgs[2]);
 				Log.i("single",key+" "+targetPort);
 				Socket clientSocket = null;
+				String value=null;
+
 				try {
-					clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(targetPort));
-					PrintWriter pw = new PrintWriter(clientSocket.getOutputStream(), true);
+					for(int i=0;i<2;i++){
+						try{
 
-					pw.println("single:"+key);
-					pw.flush();
-					BufferedReader dis = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
-					String value = dis.readLine();
-					Log.i("Client key",key);
-//					Log.i("Client value",value);
-					clientSocket.close();
+							if(targetPort==myPort){continue;}
 
-					if(value == null){
-						clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), getRightPort(Integer.parseInt(targetPort)));
-						pw = new PrintWriter(clientSocket.getOutputStream(), true);
-						pw.println("single:"+key);
-						pw.flush();
-						dis = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
-						value = dis.readLine();
+							clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), targetPort);
+							PrintWriter pw = new PrintWriter(clientSocket.getOutputStream(), true);
+							BufferedReader dis = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+							pw.println("single:"+key);
+							pw.flush();
+							clientSocket.setSoTimeout(100);
+							String res = dis.readLine();
+							clientSocket.close();
+							if(res!=null){
+								value = res;
+								break;
+							}
+							Log.i("Client key",key);
+
+						}catch (Exception e){
+
+						}
+						targetPort = getRightPort(targetPort);
 					}
-
-
-
 					return value;
 
 				}catch (Exception e){
