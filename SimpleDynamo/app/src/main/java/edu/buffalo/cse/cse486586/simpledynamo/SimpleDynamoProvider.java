@@ -61,7 +61,6 @@ public class SimpleDynamoProvider extends ContentProvider {
 	int failedPort = 0;
 	ArrayList<Integer> REMOTE_PORTS = new ArrayList<Integer>(Arrays.asList(11108,11112,11116,11120,11124));
 	ArrayList<Integer> portsSortedList = new ArrayList<Integer>();
-	boolean del = true;
 	int myPortpos = 0;
 
 	@Override
@@ -129,17 +128,49 @@ public class SimpleDynamoProvider extends ContentProvider {
 
 			for(int i=1;i<msgs.length;i = i+2){
 				String key = msgs[i];
-
+				int now = 0;
 				try{
 					String filename = key + ".txt";
 					String val = msgs[i+1];
+					now = Integer.parseInt(val.split(",")[1]);
+					try{
+						String contents = "";
+						FileInputStream fis;
 
-					File file = new File(context.getFilesDir(), filename);
+						fis = context.openFileInput(filename);
+						InputStreamReader inputStreamReader =
+								new InputStreamReader(fis, StandardCharsets.UTF_8);
 
-					FileOutputStream fos = context.openFileOutput(filename, Context.MODE_PRIVATE);
-					fos.write(val.getBytes());
-					fos.close();
+						BufferedReader reader = new BufferedReader(inputStreamReader);
+						String line = reader.readLine();
+						while (line != null) {
+							contents = contents + line;
+							line = reader.readLine();
+						}
+						int old=0;
+						if(contents.contains(",")){
+							 old= Integer.parseInt(contents.split(",")[1]);
+						}
 
+						if (now>old){
+							File file = new File(context.getFilesDir(), filename);
+
+							FileOutputStream fos = context.openFileOutput(filename, Context.MODE_PRIVATE);
+							fos.write(val.getBytes());
+							fos.close();
+						}
+
+
+					}catch (FileNotFoundException e){
+
+						File file = new File(context.getFilesDir(), filename);
+
+						FileOutputStream fos = context.openFileOutput(filename, Context.MODE_PRIVATE);
+						fos.write(val.getBytes());
+						fos.close();
+
+
+					}
 
 				} catch (Exception e) {
 					e.printStackTrace();
@@ -147,7 +178,8 @@ public class SimpleDynamoProvider extends ContentProvider {
 				}
 			}
 
-		}else {
+		}
+		else {
 
 
 			boolean replication = true;
@@ -170,6 +202,15 @@ public class SimpleDynamoProvider extends ContentProvider {
 				Log.i("inserted "+replication, values.get("key").toString());
 				String filename = values.get("key").toString() + ".txt";
 				String msg = values.get("value").toString();
+
+				if(msg.contains(":")){
+					int count = Integer.parseInt(msg.split(":")[1]);
+					String original = msg.split(",")[0];
+					count++;
+					msg = original+","+Integer.toString(count);
+				}else{
+					msg = msg+",1";
+				}
 
 				File file = new File(context.getFilesDir(), filename);
 
@@ -278,7 +319,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 		Log.i("path query",selection);
 
 		if(selection.contains("@")){
-			cursor = (MatrixCursor) fetchLocal();
+			cursor = (MatrixCursor) fetchLocal(false);
 		}else if(selection.contains("*")){
 			cursor = (MatrixCursor) fetchAll();
 		}
@@ -398,7 +439,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 				line = reader.readLine();
 			}
 
-			Log.i("fileContents",contents);
+			Log.i("fileContents fetchfile",contents);
 			cursor.newRow()
 					.add("key", selection)
 					.add("value", contents);
@@ -442,7 +483,9 @@ public class SimpleDynamoProvider extends ContentProvider {
 				contents = contents + line;
 				line = reader.readLine();
 			}
-
+			if(contents.contains(",")){
+				contents = contents.split(",")[0];
+			}
 			Log.i("fileContents",contents);
 			cursor.newRow()
 					.add("key", selection)
@@ -458,6 +501,9 @@ public class SimpleDynamoProvider extends ContentProvider {
 
 				if(value.contains("initial")){
 					return fetch(selection);
+				}
+				if(value.contains(":")){
+					value = value.split(":")[0];
 				}
 
 				cursor.newRow()
@@ -493,6 +539,11 @@ public class SimpleDynamoProvider extends ContentProvider {
 		String msgs[] = msg.split(":");
 
 		for(int i=1;i<msgs.length;i = i+2){
+
+			if(msgs[i+1].contains(",")){
+				msgs[i+1] = msgs[i+1].split(",")[0];
+			}
+
 			globalCursor.newRow()
 					.add("key", msgs[i])
 					.add("value", msgs[i+1]);
@@ -500,7 +551,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 
 		return globalCursor;
 	}
-	public MatrixCursor fetchLocal(){
+	public MatrixCursor fetchLocal(boolean version){
 
 		MatrixCursor cursor = new MatrixCursor(new String[]{"key","value"});
 
@@ -532,7 +583,9 @@ public class SimpleDynamoProvider extends ContentProvider {
 				contents = stringBuilder.toString();
 			}
 //            testPosition(selection);
-
+			if(contents.contains(",") && !version){
+				contents = contents.split(",")[0];
+			}
 			cursor.newRow()
 					.add("key", selection)
 					.add("value", contents);
@@ -672,8 +725,10 @@ public class SimpleDynamoProvider extends ContentProvider {
 					String value="initial";
 
 					try {
+						int max = 0;
 						for(int i=0;i<3;i++){
 							try{
+								int now=0;
 								if(targetPort==myPort){continue;}
 								Log.i("finalcheck",key);
 								clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), targetPort);
@@ -686,8 +741,18 @@ public class SimpleDynamoProvider extends ContentProvider {
 								Log.i("finalcheck","res "+res);
 								clientSocket.close();
 								if(res!=null && !res.contains("empty") && !res.contains("null")){
-									value = res;
-									Log.i("finalcheck",key+":break:"+Integer.toString(targetPort));
+
+									now = Integer.parseInt(res.split(",")[1]);
+									if(now>max){
+										value = res.split(",")[0];
+										max = now;
+									}
+
+									Log.i("finalcheck",key+":break:"+"value"+value+":"+Integer.toString(targetPort));
+
+
+
+
 //								break;
 								}
 //							try {
@@ -886,7 +951,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 						}
 						else if(msg.contains("queryTrim")){
 
-							MatrixCursor cursor = (MatrixCursor) fetchLocal();
+							MatrixCursor cursor = (MatrixCursor) fetchLocal(true);
 							if(cursor==null){
 								ds.println("empty");
 							}else {
@@ -920,7 +985,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 
 						}
 						else if(msg.contains("queryAll")){
-							MatrixCursor cursor = (MatrixCursor) fetchLocal();
+							MatrixCursor cursor = (MatrixCursor) fetchLocal(false);
 							String msgToSend = "";
 
 							Log.i("length count",""+Integer.toString(cursor.getCount()));
