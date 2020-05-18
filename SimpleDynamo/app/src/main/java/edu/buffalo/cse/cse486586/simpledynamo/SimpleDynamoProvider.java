@@ -61,9 +61,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 	int failedPort = 0;
 	ArrayList<Integer> REMOTE_PORTS = new ArrayList<Integer>(Arrays.asList(11108,11112,11116,11120,11124));
 	ArrayList<Integer> portsSortedList = new ArrayList<Integer>();
-
-	int b1,l1,b2,l2;
-
+	boolean del = true;
 	int myPortpos = 0;
 
 	@Override
@@ -73,31 +71,54 @@ public class SimpleDynamoProvider extends ContentProvider {
 		String contents = "";
 		try {
 
-			if(selection.equals("@")){
-
+			if(del){
+				del = false;
 				String[] filenames = context.fileList();
 				for(String filename: filenames){
 					context.deleteFile(filename);
 				}
-
-			}else if(selection.equals("*")){
 				try {
 					new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR,"deleteAll");
 				} catch (Exception ex){
 
 				}
-
+				return 0;
 			}else{
-				String filename = selection + ".txt";
-				FileInputStream fis;
-				if(!context.deleteFile(filename)){
-					try {
-						int port = findMatch(selection);
-						new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR,"deleteOne",selection,Integer.toString(port));
-					} catch (Exception ex){
-					}
+
+				String[] filenames = context.fileList();
+				for(String filename: filenames){
+					context.deleteFile(filename);
 				}
+				return 0;
 			}
+
+
+
+//			if(selection.equals("@")){
+//
+//				String[] filenames = context.fileList();
+//				for(String filename: filenames){
+//					context.deleteFile(filename);
+//				}
+//
+//			}else if(selection.equals("*")){
+//				try {
+//					new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR,"deleteAll");
+//				} catch (Exception ex){
+//
+//				}
+//
+//			}else{
+//				String filename = selection + ".txt";
+//				FileInputStream fis;
+//				if(!context.deleteFile(filename)){
+//					try {
+//						int port = findMatch(selection);
+//						new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR,"deleteOne",selection,Integer.toString(port));
+//					} catch (Exception ex){
+//					}
+//				}
+//			}
 
 
 
@@ -131,10 +152,6 @@ public class SimpleDynamoProvider extends ContentProvider {
 
 			for(int i=1;i<msgs.length;i = i+2){
 				String key = msgs[i];
-//				if(continueOrNot(key,myPort,leftPort) || continueOrNot(key,b1,l1) || continueOrNot(key,b2,l2)){
-//				}else{
-//					continue;
-//				}
 
 				try{
 					String filename = key + ".txt";
@@ -162,19 +179,18 @@ public class SimpleDynamoProvider extends ContentProvider {
 				if (values.containsKey("replication")) {
 					replication = false;
 				}else if (values.containsKey("store")) {
-					replication = true;
+					replication = false;
 				}
 				else if (findMatch(values.get("key").toString()) != myPort) {
 					int targetPort = findMatch(values.get("key").toString());
 					 new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR, "insert", values.get("key").toString(), values.get("value").toString(), Integer.toString(targetPort));
-//					new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR, "replication", values.get("key").toString(), values.get("value").toString(),Integer.toString(targetPort));
 					 return uri;
 				}
 
 				if(replication){
 					new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR, "replication", values.get("key").toString(), values.get("value").toString(),Integer.toString(myPort));
 				}
-				Log.i("inserted", values.get("key").toString());
+				Log.i("inserted "+replication, values.get("key").toString());
 				String filename = values.get("key").toString() + ".txt";
 				String msg = values.get("value").toString();
 
@@ -205,16 +221,8 @@ public class SimpleDynamoProvider extends ContentProvider {
 		String portStr = tel.getLine1Number().substring(tel.getLine1Number().length() - 4);
 		myPort = (Integer.parseInt(portStr) * 2);
 		try {
-
-
 			loadPorts();
 			loadPortPos();
-
-			b1 = leftPort;
-			l1 = getLeftPort(b1);
-			b2 = l1;
-			l2 = getLeftPort(b2);
-
 		}catch(Exception e){}
 
 
@@ -225,7 +233,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 		} catch (IOException e) {
 //            Log.e(TAG, "Can't create a ServerSocket");
 		}
-
+		Log.i("finalcheck",portsSortedList.toString());
 		new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR, "connect");
 		return false;
 	}
@@ -284,11 +292,11 @@ try {
 
 
 	@Override
-	public synchronized Cursor query(Uri uri, String[] projection, String selection, String[] selectionArgs,
+	public Cursor query(Uri uri, String[] projection, String selection, String[] selectionArgs,
 						String sortOrder) {
-		try {
-			Thread.sleep(250);
-		}catch (Exception ee){}
+//		try {
+//			Thread.sleep(250);
+//		}catch (Exception ee){}
 		MatrixCursor cursor;
 		Log.i("path query",selection);
 
@@ -434,6 +442,10 @@ try {
 
 	public Cursor fetch(String selection){
 
+//				try {
+//			Thread.sleep(250);
+//		}catch (Exception ee){}
+
 		MatrixCursor cursor = new MatrixCursor(new String[]{"key","value"});
 
 		Log.i("query",selection);
@@ -465,7 +477,12 @@ try {
 				int port = findMatch(selection);
 				Log.i("port",selection+":"+Integer.toString(port));
 				String value= new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR,"single",selection,Integer.toString(port)).get();
-				Log.i("fetch value",value);
+				Log.i("finalcheck",selection+":targetPort:"+Integer.toString(port)+" :myPort:"+Integer.toString(myPort)+" :R1:"+Integer.toString(getRightPort(port))+" :R2:"+Integer.toString(getRightPort(getRightPort(port))));
+
+				if(value.contains("initial")){
+					return fetch(selection);
+				}
+
 				cursor.newRow()
 						.add("key", selection)
 						.add("value", value);
@@ -506,61 +523,6 @@ try {
 
 		return globalCursor;
 	}
-
-
-	public MatrixCursor fetchTrim(int port){
-
-		MatrixCursor cursor = new MatrixCursor(new String[]{"key","value"});
-
-
-		String[] filenames = context.fileList();
-		if(filenames.length == 0){return null;}
-		String contents = "";
-		for(String filename : filenames) {
-			StringBuilder stringBuilder = new StringBuilder();
-
-			String selection;
-			selection = filename.split(".txt")[0];
-			try {
-				FileInputStream fis;
-				fis = context.openFileInput(filename);
-				InputStreamReader inputStreamReader =
-						new InputStreamReader(fis, StandardCharsets.UTF_8);
-
-				BufferedReader reader = new BufferedReader(inputStreamReader);
-				String line = reader.readLine();
-				while (line != null) {
-					stringBuilder.append(line);
-					line = reader.readLine();
-				}
-
-			} catch (Exception e) {
-				e.printStackTrace();
-			} finally {
-				contents = stringBuilder.toString();
-			}
-
-			Log.i("path fetch key",selection);
-			Log.i("path fetch value",contents);
-
-//            testPosition(selection);
-
-			cursor.newRow()
-					.add("key", selection)
-					.add("value", contents);
-
-
-		}
-
-		if(contents==""){return null;}
-
-		return cursor;
-
-	}
-
-
-
-
 	public MatrixCursor fetchLocal(){
 
 		MatrixCursor cursor = new MatrixCursor(new String[]{"key","value"});
@@ -592,16 +554,11 @@ try {
 			} finally {
 				contents = stringBuilder.toString();
 			}
-
-			Log.i("path fetch key",selection);
-			Log.i("path fetch value",contents);
-
 //            testPosition(selection);
 
 			cursor.newRow()
 					.add("key", selection)
 					.add("value", contents);
-
 
 		}
 
@@ -613,20 +570,6 @@ try {
 
 
 //    /////////////////// Async Tasks Start ////////////////////////////////////////
-
-	public static class MartixCursorSerialized implements Serializable{
-
-		MatrixCursor matrixCursor;
-
-		public MartixCursorSerialized(MatrixCursor cursor) {
-			this.matrixCursor = cursor;
-		}
-
-
-		public MatrixCursor getMatrixCursor() {
-			return matrixCursor;
-		}
-	}
 
 	private class ClientTask extends AsyncTask<String, Void, String> {
 
@@ -650,7 +593,7 @@ try {
 							pw.flush();
 							BufferedReader dis = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
 							String value = dis.readLine();
-							clientSocket.close();
+//							clientSocket.close();
 
 							if(value!="empty"){
 								msgRec = msgRec + value;
@@ -683,41 +626,44 @@ try {
 					clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(targetPort));
 					PrintWriter pw = new PrintWriter(clientSocket.getOutputStream(), true);
 					BufferedReader dis = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
-					clientSocket.setSoTimeout(100);
+//					clientSocket.setSoTimeout(100);
 					pw.println("insert:"+key+":"+value);
 					String res = dis.readLine();
+
 					clientSocket.close();
-					Log.i("dis","dis:"+targetPort+":"+res);
-					if(res == null){
-						failedPort = Integer.parseInt(targetPort);
+//					Log.i("dis","dis:"+key+":targetport:"+targetPort+":"+res);
+					int pport=0;
+//					if(res == null){
+					pport = Integer.parseInt(targetPort);
 
-						ArrayList<Integer> targetPorts = new ArrayList<Integer>();
-						targetPorts.add(getRightPort(failedPort));
-						targetPorts.add(getRightPort(targetPorts.get(0)));
+					ArrayList<Integer> targetPorts = new ArrayList<Integer>();
+					targetPorts.add(getRightPort(pport));
+					targetPorts.add(getRightPort(targetPorts.get(0)));
 
-						for(int repPort:targetPorts){
-							try {
-
-								clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), repPort);
-								pw = new PrintWriter(clientSocket.getOutputStream(), true);
-								dis = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
-								pw.println("replication:"+key+":"+value);
-								res = dis.readLine();
-								clientSocket.close();
-
-							} catch (Exception e) {
-								Log.i("replication error",e.getMessage());
-							}
+					for(int repPort:targetPorts){
+						try {
+							Log.i("trying replication","dis:"+key+":repPort:"+repPort);
+							clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), repPort);
+							pw = new PrintWriter(clientSocket.getOutputStream(), true);
+							dis = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+							pw.println("replication:"+key+":"+value);
+							res = dis.readLine();
+							clientSocket.close();
+							Log.i("trying status","dis:"+key+":repPort:"+repPort);
+						} catch (Exception e) {
+							Log.i("replication error",e.getMessage());
 						}
-
 					}
+
+//					}
 				} catch (Exception e) {
 					Log.i("clientException","socket timeout "+targetPort);
 
 				}
 
 
-			}else  if(msgs[0].contains("replication")){
+			}
+			else  if(msgs[0].contains("replication")){
 				String key = msgs[1];
 				String value = msgs[2];
 				ArrayList<Integer> targetPorts = new ArrayList<Integer>();
@@ -740,36 +686,39 @@ try {
 				}
 			}
 			else  if(msgs[0].contains("single")){
-				globalCursor =  new MatrixCursor(new String[]{"key","value"});
 				String key = msgs[1];
+				try{
+
 				int targetPort = Integer.parseInt(msgs[2]);
 				Log.i("single",key+" "+targetPort);
 				Socket clientSocket = null;
-				String value=null;
+				String value="initial";
 
 				try {
 					for(int i=0;i<3;i++){
 						try{
-
 							if(targetPort==myPort){continue;}
-
+							Log.i("finalcheck",key);
 							clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), targetPort);
 							PrintWriter pw = new PrintWriter(clientSocket.getOutputStream(), true);
 							BufferedReader dis = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
 							pw.println("single:"+key);
-							pw.flush();
+//							clientSocket.setSoTimeout(200);
 							String res = dis.readLine();
+
+							Log.i("finalcheck","res "+res);
 							clientSocket.close();
-							if(res!=null || res!="empty"){
+							if(res!=null && !res.contains("empty") && !res.contains("null")){
 								value = res;
-								break;
+								Log.i("finalcheck",key+":break:"+Integer.toString(targetPort));
+//								break;
 							}
 //							try {
 //								Thread.sleep(250);
 //							}catch (Exception ee){}
 
-						}catch (Exception e){
-
+						}catch (Exception exc){
+							Log.i("exc","Exception +"+exc.getMessage());
 						}
 						targetPort = getRightPort(targetPort);
 					}
@@ -779,6 +728,10 @@ try {
 
 					Log.i("Exception Client",e.getMessage());
 
+				}
+
+				}catch (Exception singleEx){
+					Log.i("singleEx",key +":"+singleEx.getMessage());
 				}
 
 			}
@@ -807,7 +760,8 @@ try {
 
 				}
 				return msgRec;
-			}else if(msgs[0].contains("deleteOne")){
+			}
+			else if(msgs[0].contains("deleteOne")){
 
 				try {
 					String key = msgs[1];
@@ -882,8 +836,10 @@ try {
 							contentValues.put("key",key);
 							contentValues.put("value",value);
 							contentValues.put("store","store");
-							insert(getUri(),contentValues);
+//							socket.close();
 							ds.println("done");
+							insert(getUri(),contentValues);
+
 
 						}else if(msg.contains("replication")){
 
@@ -893,14 +849,10 @@ try {
 							contentValues.put("key",key);
 							contentValues.put("value",value);
 							contentValues.put("replication","replication");
-							insert(getUri(),contentValues);
 							ds.println("done");
-
 //							socket.close();
-						}else if(msg.contains("failedPort")){
-							failedPort = Integer.parseInt(msg.split(":")[1]);
-							Log.i("serverFailedPort",Integer.toString(failedPort));
-							socket.close();
+							insert(getUri(),contentValues);
+//							socket.close();
 						}
 						else if(msg.contains("single")){
 							String key = msg.split(":")[1];
@@ -934,7 +886,6 @@ try {
 
 								String msgToSend = "";
 
-								Log.i("length count", Integer.toString(cursor.getCount()));
 
 								cursor.moveToFirst();
 								do {
@@ -959,7 +910,7 @@ try {
 							MatrixCursor cursor = (MatrixCursor) fetchLocal();
 							String msgToSend = "";
 
-							Log.i("length count",Integer.toString(cursor.getCount()));
+							Log.i("length count",""+Integer.toString(cursor.getCount()));
 
 							cursor.moveToFirst();
 							do{

@@ -1,10 +1,10 @@
 {
     "logs": [
         {
-            "outputFile": "/home/vamsi/AndroidStudioProjects/SimpleDynamo/app/build/intermediates/incremental/mergeDebugResources/merged.dir/values-v11/values-v11.xml",
+            "outputFile": "/home/suhash/AndroidStudioProjects/Distributed-Systems/SimpleDynamo/app/build/intermediates/incremental/mergeDebugResources/merged.dir/values-v11/values-v11.xml",
             "map": [
                 {
-                    "source": "/home/vamsi/AndroidStudioProjects/SimpleDynamo/app/src/main/res/values-v11/styles.xml",
+                    "source": "/home/suhash/AndroidStudioProjects/Distributed-Systems/SimpleDynamo/app/src/main/res/values-v11/styles.xml",
                     "from": {
                         "startLines": "6",
                         "startColumns": "4",
