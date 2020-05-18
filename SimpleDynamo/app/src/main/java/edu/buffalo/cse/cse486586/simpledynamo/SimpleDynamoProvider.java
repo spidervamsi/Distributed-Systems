@@ -71,54 +71,31 @@ public class SimpleDynamoProvider extends ContentProvider {
 		String contents = "";
 		try {
 
-			if(del){
-				del = false;
+//			int targetPort = findMatch(selection);
+
+			if(selection.equals("@")){
+
 				String[] filenames = context.fileList();
 				for(String filename: filenames){
 					context.deleteFile(filename);
 				}
+
+			}else if(selection.equals("*")){
 				try {
 					new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR,"deleteAll");
 				} catch (Exception ex){
 
 				}
-				return 0;
-			}else{
 
-				String[] filenames = context.fileList();
-				for(String filename: filenames){
-					context.deleteFile(filename);
-				}
-				return 0;
+			}else if(selection.contains("direct")){
+				String filename = selection.split(":")[0] + ".txt";
+				context.deleteFile(filename);
 			}
+			else{
+				int targetPort = findMatch(selection);
+				new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR,"deleteOne",selection,Integer.toString(targetPort));
 
-
-
-//			if(selection.equals("@")){
-//
-//				String[] filenames = context.fileList();
-//				for(String filename: filenames){
-//					context.deleteFile(filename);
-//				}
-//
-//			}else if(selection.equals("*")){
-//				try {
-//					new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR,"deleteAll");
-//				} catch (Exception ex){
-//
-//				}
-//
-//			}else{
-//				String filename = selection + ".txt";
-//				FileInputStream fis;
-//				if(!context.deleteFile(filename)){
-//					try {
-//						int port = findMatch(selection);
-//						new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR,"deleteOne",selection,Integer.toString(port));
-//					} catch (Exception ex){
-//					}
-//				}
-//			}
+			}
 
 
 
@@ -183,8 +160,8 @@ public class SimpleDynamoProvider extends ContentProvider {
 				}
 				else if (findMatch(values.get("key").toString()) != myPort) {
 					int targetPort = findMatch(values.get("key").toString());
-					 new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR, "insert", values.get("key").toString(), values.get("value").toString(), Integer.toString(targetPort));
-					 return uri;
+					new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR, "insert", values.get("key").toString(), values.get("value").toString(), Integer.toString(targetPort));
+					return uri;
 				}
 
 				if(replication){
@@ -252,41 +229,41 @@ public class SimpleDynamoProvider extends ContentProvider {
 
 
 	public void loadPorts(){
-try {
-		REMOTE_PORTS = new ArrayList<Integer>(Arrays.asList(11108,11112,11116,11120,11124));
-	    portsSortedList.clear();
-		HashMap<String,Integer> portsHashValue = new HashMap<String, Integer>();
-		ArrayList<String> portsHashList = new ArrayList<String>();
+		try {
+			REMOTE_PORTS = new ArrayList<Integer>(Arrays.asList(11108,11112,11116,11120,11124));
+			portsSortedList.clear();
+			HashMap<String,Integer> portsHashValue = new HashMap<String, Integer>();
+			ArrayList<String> portsHashList = new ArrayList<String>();
 
-		for(int remote_port : REMOTE_PORTS ){
-			portsHashList.add(genHash(Integer.toString(remote_port/2)));
-			portsHashValue.put(genHash(Integer.toString(remote_port/2)),remote_port);
+			for(int remote_port : REMOTE_PORTS ){
+				portsHashList.add(genHash(Integer.toString(remote_port/2)));
+				portsHashValue.put(genHash(Integer.toString(remote_port/2)),remote_port);
 
-		}
+			}
 
-		Collections.sort(portsHashList);
+			Collections.sort(portsHashList);
 //        Collections.reverse(portsHashList);
 
-		for(String portHash:portsHashList){
-			Log.i("hash",Integer.toString(portsHashValue.get(portHash)));
-			Log.i("hash", String.valueOf(genHash(Integer.toString(portsHashValue.get(portHash)/2)).compareTo(genHash("5560")))); // 1
-			portsSortedList.add(portsHashValue.get(portHash));
-		}
-		int index = portsSortedList.indexOf(myPort);
+			for(String portHash:portsHashList){
+				Log.i("hash",Integer.toString(portsHashValue.get(portHash)));
+				Log.i("hash", String.valueOf(genHash(Integer.toString(portsHashValue.get(portHash)/2)).compareTo(genHash("5560")))); // 1
+				portsSortedList.add(portsHashValue.get(portHash));
+			}
+			int index = portsSortedList.indexOf(myPort);
 
-		if(index == 0){
-			leftPort = portsSortedList.get(portsSortedList.size()-1);
-			rightPort = portsSortedList.get(index+1);
-		}else if(index == portsSortedList.size()-1){
-			leftPort = portsSortedList.get(index-1);
-			rightPort = portsSortedList.get(0);
-		}else {
-			leftPort = portsSortedList.get(index-1);
-			rightPort = portsSortedList.get(index+1);
-		}
+			if(index == 0){
+				leftPort = portsSortedList.get(portsSortedList.size()-1);
+				rightPort = portsSortedList.get(index+1);
+			}else if(index == portsSortedList.size()-1){
+				leftPort = portsSortedList.get(index-1);
+				rightPort = portsSortedList.get(0);
+			}else {
+				leftPort = portsSortedList.get(index-1);
+				rightPort = portsSortedList.get(index+1);
+			}
 
 
-}catch (Exception e){}
+		}catch (Exception e){}
 
 	}
 
@@ -428,7 +405,7 @@ try {
 
 		}catch (FileNotFoundException e){
 
-				return null;
+			return null;
 		}
 		catch (Exception e){
 			e.printStackTrace();
@@ -578,40 +555,40 @@ try {
 			MatrixCursor globalCursor = null;
 			if(msgs[0].contains("connect")){
 
-					ArrayList<Integer> tempPorts = new ArrayList<Integer>();
-					tempPorts.add(getLeftPort(myPort));
-					tempPorts.add(getLeftPort(tempPorts.get(0)));
-					tempPorts.add(getRightPort(myPort));
-					String msgRec="";
-					for(Integer targetPort : tempPorts){
-						if(targetPort == myPort){continue;}
-						Socket clientSocket = null;
-						try {
-							clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), targetPort);
-							PrintWriter pw = new PrintWriter(clientSocket.getOutputStream(), true);
-							pw.println("queryTrim:"+Integer.toString(myPort));
-							pw.flush();
-							BufferedReader dis = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
-							String value = dis.readLine();
+				ArrayList<Integer> tempPorts = new ArrayList<Integer>();
+				tempPorts.add(getLeftPort(myPort));
+				tempPorts.add(getLeftPort(tempPorts.get(0)));
+				tempPorts.add(getRightPort(myPort));
+				String msgRec="";
+				for(Integer targetPort : tempPorts){
+					if(targetPort == myPort){continue;}
+					Socket clientSocket = null;
+					try {
+						clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), targetPort);
+						PrintWriter pw = new PrintWriter(clientSocket.getOutputStream(), true);
+						pw.println("queryTrim:"+Integer.toString(myPort));
+						pw.flush();
+						BufferedReader dis = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+						String value = dis.readLine();
 //							clientSocket.close();
 
-							if(value!="empty"){
-								msgRec = msgRec + value;
-							}
-
-
-						} catch (Exception e) {
-							Log.i("Excpetion QueryAll", e.getMessage());
-							e.printStackTrace();
+						if(value!="empty"){
+							msgRec = msgRec + value;
 						}
 
+
+					} catch (Exception e) {
+						Log.i("Excpetion QueryAll", e.getMessage());
+						e.printStackTrace();
 					}
-					if(msgRec!=""){
-						ContentValues contentValues = new ContentValues();
-						contentValues.put("fetchAll","fetchAll");
-						contentValues.put("value",msgRec);
-						insert(getUri(),contentValues);
-					}
+
+				}
+				if(msgRec!=""){
+					ContentValues contentValues = new ContentValues();
+					contentValues.put("fetchAll","fetchAll");
+					contentValues.put("value",msgRec);
+					insert(getUri(),contentValues);
+				}
 
 
 			}
@@ -689,46 +666,46 @@ try {
 				String key = msgs[1];
 				try{
 
-				int targetPort = Integer.parseInt(msgs[2]);
-				Log.i("single",key+" "+targetPort);
-				Socket clientSocket = null;
-				String value="initial";
+					int targetPort = Integer.parseInt(msgs[2]);
+					Log.i("single",key+" "+targetPort);
+					Socket clientSocket = null;
+					String value="initial";
 
-				try {
-					for(int i=0;i<3;i++){
-						try{
-							if(targetPort==myPort){continue;}
-							Log.i("finalcheck",key);
-							clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), targetPort);
-							PrintWriter pw = new PrintWriter(clientSocket.getOutputStream(), true);
-							BufferedReader dis = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
-							pw.println("single:"+key);
+					try {
+						for(int i=0;i<3;i++){
+							try{
+								if(targetPort==myPort){continue;}
+								Log.i("finalcheck",key);
+								clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), targetPort);
+								PrintWriter pw = new PrintWriter(clientSocket.getOutputStream(), true);
+								BufferedReader dis = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+								pw.println("single:"+key);
 //							clientSocket.setSoTimeout(200);
-							String res = dis.readLine();
+								String res = dis.readLine();
 
-							Log.i("finalcheck","res "+res);
-							clientSocket.close();
-							if(res!=null && !res.contains("empty") && !res.contains("null")){
-								value = res;
-								Log.i("finalcheck",key+":break:"+Integer.toString(targetPort));
+								Log.i("finalcheck","res "+res);
+								clientSocket.close();
+								if(res!=null && !res.contains("empty") && !res.contains("null")){
+									value = res;
+									Log.i("finalcheck",key+":break:"+Integer.toString(targetPort));
 //								break;
-							}
+								}
 //							try {
 //								Thread.sleep(250);
 //							}catch (Exception ee){}
 
-						}catch (Exception exc){
-							Log.i("exc","Exception +"+exc.getMessage());
+							}catch (Exception exc){
+								Log.i("exc","Exception +"+exc.getMessage());
+							}
+							targetPort = getRightPort(targetPort);
 						}
-						targetPort = getRightPort(targetPort);
+						return value;
+
+					}catch (Exception e){
+
+						Log.i("Exception Client",e.getMessage());
+
 					}
-					return value;
-
-				}catch (Exception e){
-
-					Log.i("Exception Client",e.getMessage());
-
-				}
 
 				}catch (Exception singleEx){
 					Log.i("singleEx",key +":"+singleEx.getMessage());
@@ -763,17 +740,53 @@ try {
 			}
 			else if(msgs[0].contains("deleteOne")){
 
+				Socket clientSocket = null;
 				try {
 					String key = msgs[1];
 					String targetPort = msgs[2];
-					Socket clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(targetPort));
+
+					clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(targetPort));
 					PrintWriter pw = new PrintWriter(clientSocket.getOutputStream(), true);
 					BufferedReader dis = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+//					clientSocket.setSoTimeout(100);
 					pw.println("deleteOne:"+key);
+					String res = dis.readLine();
 
-				}catch (Exception e){
-					Log.i("Exception delete","delete "+e.getMessage());
+					clientSocket.close();
+//					Log.i("dis","dis:"+key+":targetport:"+targetPort+":"+res);
+					int pport=0;
+//					if(res == null){
+					pport = Integer.parseInt(targetPort);
+
+					ArrayList<Integer> targetPorts = new ArrayList<Integer>();
+					targetPorts.add(getRightPort(pport));
+					targetPorts.add(getRightPort(targetPorts.get(0)));
+
+					for(int repPort:targetPorts){
+						try {
+							Log.i("trying replication","dis:"+key+":repPort:"+repPort);
+							clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), repPort);
+							pw = new PrintWriter(clientSocket.getOutputStream(), true);
+							dis = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+							pw.println("deleteOne:"+key);
+							res = dis.readLine();
+							clientSocket.close();
+							Log.i("trying status","dis:"+key+":repPort:"+repPort);
+						} catch (Exception e) {
+							Log.i("replication error",e.getMessage());
+						}
+					}
+
+//					}
+				} catch (Exception e) {
+					Log.i("clientException","socket timeout ");
+
 				}
+
+
+
+
+
 
 			}else if(msgs[0].contains("deleteAll")){
 				for(Integer targetPort : REMOTE_PORTS){
@@ -928,7 +941,8 @@ try {
 						}
 						else if(msg.contains("deleteOne")){
 							String key = msg.split(":")[1];
-							delete(getUri(),key,null);
+							ds.println("done");
+							delete(getUri(),key+":direct",null);
 
 						}
 
