@@ -2,12 +2,15 @@ package edu.buffalo.cse.cse486586.simpledynamo;
 
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.text.ParseException;
 import java.util.Formatter;
 
 import android.content.ContentProvider;
 import android.content.ContentValues;
 import android.database.Cursor;
 import android.net.Uri;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -44,9 +47,9 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.concurrent.ExecutionException;
-//import java.util.concurrent.locks.Lock;
-//import java.util.concurrent.locks.ReadWriteLock;
-//import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 
 // command to test
@@ -63,10 +66,14 @@ public class SimpleDynamoProvider extends ContentProvider {
 	ArrayList<Integer> portsSortedList = new ArrayList<Integer>();
 	int myPortpos = 0;
 
-	@Override
-	public synchronized int delete(Uri uri, String selection, String[] selectionArgs) {
-		// TODO Auto-generated method stub
+    ReadWriteLock lock = new ReentrantReadWriteLock();
+    Lock writeLock = lock.writeLock();
+    Lock readLock = lock.readLock();
 
+	@Override
+	public int delete(Uri uri, String selection, String[] selectionArgs) {
+		// TODO Auto-generated method stub
+        writeLock.lock();
 		String contents = "";
 		try {
 
@@ -100,6 +107,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 
 		}catch (Exception e){
 		}
+        writeLock.unlock();
 		return 0;
 	}
 
@@ -118,14 +126,13 @@ public class SimpleDynamoProvider extends ContentProvider {
 	}
 
 	@Override
-	public synchronized Uri insert(Uri uri, ContentValues values) {
-
+	public Uri insert(Uri uri, ContentValues values) {
 
 		if(values.containsKey("fetchAll")){
 
 			String msg = values.get("value").toString();
 			String msgs[] = msg.split(":");
-
+            writeLock.lock();
 			for(int i=1;i<msgs.length;i = i+2){
 				String key = msgs[i];
 				int now = 0;
@@ -152,7 +159,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 							 old= Integer.parseInt(contents.split(",")[1]);
 						}
 
-						if (now>old){
+						if (now>=old){
 							File file = new File(context.getFilesDir(), filename);
 
 							FileOutputStream fos = context.openFileOutput(filename, Context.MODE_PRIVATE);
@@ -160,6 +167,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 							fos.close();
 						}
 
+						Log.i("initial insert"," old:"+contents+": new:"+val);
 
 					}catch (FileNotFoundException e){
 
@@ -177,7 +185,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 					Log.i("file", "can not write to file");
 				}
 			}
-
+			writeLock.unlock();
 		}
 		else {
 
@@ -199,6 +207,9 @@ public class SimpleDynamoProvider extends ContentProvider {
 				if(replication){
 					new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR, "replication", values.get("key").toString(), values.get("value").toString(),Integer.toString(myPort));
 				}
+
+                writeLock.lock();
+
 				Log.i("inserted "+replication, values.get("key").toString());
 				String filename = values.get("key").toString() + ".txt";
 				String msg = values.get("value").toString();
@@ -218,6 +229,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 				fos.write(msg.getBytes());
 				fos.close();
 
+                writeLock.unlock();
 
 			} catch (Exception e) {
 				e.printStackTrace();
@@ -234,6 +246,33 @@ public class SimpleDynamoProvider extends ContentProvider {
 	public boolean onCreate() {
 		// TODO Auto-generated method stub
 
+        ReadWriteLock lock = new ReentrantReadWriteLock();
+        Lock writeLock = lock.writeLock();
+        Lock readLock = lock.readLock();
+
+
+		String sDate1="01-01-01-01-01";
+		Date date1= null;
+		try {
+			date1 = new SimpleDateFormat("MM-dd-HH-mm-ss").parse(sDate1);
+		} catch (ParseException e) {
+			e.printStackTrace();
+		}
+		System.out.println(sDate1+"\t"+date1);
+
+		SimpleDateFormat formatter = new SimpleDateFormat("MM-dd-HH-mm-ss");
+		Date date = new Date();
+
+		System.out.println("datenow "+formatter.format(date));
+		System.out.println("datenow past "+formatter.format(date1));
+
+
+		if(date.after(date1)){
+			System.out.println("datenow "+"fine");
+		}
+		if(date1.after(date)){
+			System.out.println("datenow "+"bad");
+		}
 		context = this.getContext();
 		TelephonyManager tel = (TelephonyManager) context.getSystemService(Context.TELEPHONY_SERVICE);
 		String portStr = tel.getLine1Number().substring(tel.getLine1Number().length() - 4);
@@ -417,9 +456,10 @@ public class SimpleDynamoProvider extends ContentProvider {
 		return false;
 	}
 
-	public Cursor fetchFile(String selection){
+	public synchronized Cursor fetchFile(String selection) {
 
-		MatrixCursor cursor = new MatrixCursor(new String[]{"key","value"});
+	    readLock.lock();
+        MatrixCursor cursor = new MatrixCursor(new String[]{"key","value"});
 
 		Log.i("query",selection);
 
@@ -445,14 +485,14 @@ public class SimpleDynamoProvider extends ContentProvider {
 					.add("value", contents);
 
 		}catch (FileNotFoundException e){
-
+            readLock.unlock();
 			return null;
 		}
 		catch (Exception e){
 			e.printStackTrace();
 		}
 
-
+        readLock.unlock();
 		return cursor;
 
 
@@ -469,29 +509,6 @@ public class SimpleDynamoProvider extends ContentProvider {
 		Log.i("query",selection);
 
 		String contents = "";
-		try {
-			String filename = selection + ".txt";
-			FileInputStream fis;
-
-			fis = context.openFileInput(filename);
-			InputStreamReader inputStreamReader =
-					new InputStreamReader(fis, StandardCharsets.UTF_8);
-
-			BufferedReader reader = new BufferedReader(inputStreamReader);
-			String line = reader.readLine();
-			while (line != null) {
-				contents = contents + line;
-				line = reader.readLine();
-			}
-			if(contents.contains(",")){
-				contents = contents.split(",")[0];
-			}
-			Log.i("fileContents",contents);
-			cursor.newRow()
-					.add("key", selection)
-					.add("value", contents);
-
-		}catch (FileNotFoundException e){
 
 			try {
 				int port = findMatch(selection);
@@ -499,9 +516,9 @@ public class SimpleDynamoProvider extends ContentProvider {
 				String value= new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR,"single",selection,Integer.toString(port)).get();
 				Log.i("finalcheck",selection+":targetPort:"+Integer.toString(port)+" :myPort:"+Integer.toString(myPort)+" :R1:"+Integer.toString(getRightPort(port))+" :R2:"+Integer.toString(getRightPort(getRightPort(port))));
 
-				if(value.contains("initial")){
-					return fetch(selection);
-				}
+//				if(value.contains("initial")){
+//					return fetch(selection);
+//				}
 				if(value.contains(":")){
 					value = value.split(":")[0];
 				}
@@ -515,7 +532,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 				ex.printStackTrace();
 			}
 
-		}
+
 		catch (Exception e){
 			e.printStackTrace();
 		}
@@ -729,7 +746,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 						for(int i=0;i<3;i++){
 							try{
 								int now=0;
-								if(targetPort==myPort){continue;}
+//								if(targetPort==myPort){continue;}
 								Log.i("finalcheck",key);
 								clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), targetPort);
 								PrintWriter pw = new PrintWriter(clientSocket.getOutputStream(), true);
@@ -742,6 +759,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 								clientSocket.close();
 								if(res!=null && !res.contains("empty") && !res.contains("null")){
 
+									Log.i("finalcheck","sourceport "+Integer.toString(targetPort)+":key "+key+":value "+value);
 									now = Integer.parseInt(res.split(",")[1]);
 									if(now>max){
 										value = res.split(",")[0];
@@ -749,9 +767,6 @@ public class SimpleDynamoProvider extends ContentProvider {
 									}
 
 									Log.i("finalcheck",key+":break:"+"value"+value+":"+Integer.toString(targetPort));
-
-
-
 
 //								break;
 								}
