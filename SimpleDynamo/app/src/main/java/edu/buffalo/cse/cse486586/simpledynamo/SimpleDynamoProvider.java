@@ -134,6 +134,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 	public Uri insert(Uri uri, ContentValues values) {
 
 		if(values.containsKey("fetchAll")){
+			String dir =  values.get("fetchAll").toString();
 
 			String msg = values.get("value").toString();
 			String msgs[] = msg.split(":");
@@ -147,9 +148,12 @@ public class SimpleDynamoProvider extends ContentProvider {
 					now = Integer.parseInt(val.split(",")[1]);
 					try{
 						String contents = "";
-						FileInputStream fis;
 
-						fis = context.openFileInput(filename);
+						File mydir = context.getDir(dir, Context.MODE_PRIVATE);
+
+						File file = new File(mydir,filename);
+						FileInputStream fis = new FileInputStream(file);
+
 						InputStreamReader inputStreamReader =
 								new InputStreamReader(fis, StandardCharsets.UTF_8);
 
@@ -165,9 +169,10 @@ public class SimpleDynamoProvider extends ContentProvider {
 						}
 
 						if (now>=old){
-							File file = new File(context.getFilesDir(), filename);
-
-							FileOutputStream fos = context.openFileOutput(filename, Context.MODE_PRIVATE);
+//							File mydir = context.getDir(dir, Context.MODE_PRIVATE);
+//							File file = new File(mydir, filename);
+							file.createNewFile();
+							FileOutputStream fos = new FileOutputStream(file);
 							fos.write(val.getBytes());
 							fos.close();
 						}
@@ -176,9 +181,10 @@ public class SimpleDynamoProvider extends ContentProvider {
 
 					}catch (FileNotFoundException e){
 
-						File file = new File(context.getFilesDir(), filename);
-
-						FileOutputStream fos = context.openFileOutput(filename, Context.MODE_PRIVATE);
+						File mydir = context.getDir(dir, Context.MODE_PRIVATE);
+						File file = new File(mydir, filename);
+						file.createNewFile();
+						FileOutputStream fos = new FileOutputStream(file);
 						fos.write(val.getBytes());
 						fos.close();
 
@@ -365,7 +371,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 		Log.i("path query",selection);
 
 		if(selection.contains("@")){
-			cursor = (MatrixCursor) fetchLocal(false);
+			cursor = (MatrixCursor) fetchLocal(false,REMOTE_PORTS);
 		}else if(selection.contains("*")){
 			cursor = (MatrixCursor) fetchAll();
 		}
@@ -579,11 +585,11 @@ public class SimpleDynamoProvider extends ContentProvider {
 
 		return globalCursor;
 	}
-	public MatrixCursor fetchLocal(boolean version){
+	public MatrixCursor fetchLocal(boolean version, ArrayList<Integer> targetPorts){
 
 		MatrixCursor cursor = new MatrixCursor(new String[]{"key","value"});
 
-		for(int pport:REMOTE_PORTS) {
+		for(int pport:targetPorts) {
 
 			File mydir = context.getDir(Integer.toString(pport), Context.MODE_PRIVATE);
 			File[] files = mydir.listFiles();
@@ -647,15 +653,21 @@ public class SimpleDynamoProvider extends ContentProvider {
 				ArrayList<Integer> tempPorts = new ArrayList<Integer>();
 				tempPorts.add(getLeftPort(myPort));
 				tempPorts.add(getLeftPort(tempPorts.get(0)));
-				tempPorts.add(getRightPort(myPort));
-				String msgRec="";
+				int rPort = getRightPort(myPort);
+				tempPorts.add(rPort);
+
 				for(Integer targetPort : tempPorts){
-					if(targetPort == myPort){continue;}
+					String msgRec="";
 					Socket clientSocket = null;
 					try {
 						clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), targetPort);
 						PrintWriter pw = new PrintWriter(clientSocket.getOutputStream(), true);
-						pw.println("queryTrim:"+Integer.toString(myPort));
+						if(rPort == targetPort){
+							pw.println("queryTrim:"+Integer.toString(myPort));
+						}else{
+							pw.println("queryTrim:"+Integer.toString(targetPort));
+						}
+
 						pw.flush();
 						BufferedReader dis = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
 						String value = dis.readLine();
@@ -671,13 +683,19 @@ public class SimpleDynamoProvider extends ContentProvider {
 						e.printStackTrace();
 					}
 
+					if(msgRec!=""){
+						ContentValues contentValues = new ContentValues();
+						if(rPort == targetPort) {
+							contentValues.put("fetchAll", Integer.toString(myPort));
+						}else {
+							contentValues.put("fetchAll", Integer.toString(targetPort));
+						}
+						contentValues.put("value",msgRec);
+						insert(getUri(),contentValues);
+					}
+
 				}
-				if(msgRec!=""){
-					ContentValues contentValues = new ContentValues();
-					contentValues.put("fetchAll","fetchAll");
-					contentValues.put("value",msgRec);
-					insert(getUri(),contentValues);
-				}
+
 
 
 			}
@@ -983,16 +1001,15 @@ public class SimpleDynamoProvider extends ContentProvider {
 						}
 						else if(msg.contains("queryTrim")){
 
-							MatrixCursor cursor = (MatrixCursor) fetchLocal(true);
+							int targetPort = Integer.parseInt(msg.split(":")[1]);
+							ArrayList<Integer> targetPorts = new ArrayList<Integer>();
+							targetPorts.add(targetPort);
+
+							MatrixCursor cursor = (MatrixCursor) fetchLocal(true,targetPorts);
 							if(cursor==null){
 								ds.println("empty");
 							}else {
-								int t0 = Integer.parseInt(msg.split(":")[1]);
-								int p0 = getLeftPort(t0);
-								int t1 = p0;
-								int p1 = getLeftPort(t1);
-								int t2 = p1;
-								int p2 = getLeftPort(t2);
+
 
 								String msgToSend = "";
 
@@ -1002,9 +1019,9 @@ public class SimpleDynamoProvider extends ContentProvider {
 									String key = cursor.getString(cursor.getColumnIndex("key"));
 									String value = cursor.getString(cursor.getColumnIndex("value"));
 
-									if(continueOrNot(key,t0,p0) || continueOrNot(key,t1,p1) || continueOrNot(key,t2,p2)){
+//									if(continueOrNot(key,t0,p0) || continueOrNot(key,t1,p1) || continueOrNot(key,t2,p2)){
 										msgToSend = msgToSend + ":" + key + ":" + value;
-									}
+//									}
 								} while (cursor.moveToNext());
 
 								if(msgToSend == ""){
@@ -1017,7 +1034,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 
 						}
 						else if(msg.contains("queryAll")){
-							MatrixCursor cursor = (MatrixCursor) fetchLocal(false);
+							MatrixCursor cursor = (MatrixCursor) fetchLocal(false,REMOTE_PORTS);
 							String msgToSend = "";
 
 							Log.i("length count",""+Integer.toString(cursor.getCount()));

@@ -1,5 +1,5 @@
 #Internal package file, do not edit.
-#Tue May 19 13:32:53 EDT 2020
+#Tue May 19 14:07:30 EDT 2020
 0.baseType=DIRECTORY
 0.base=/home/vamsi/AndroidStudioProjects/SimpleDynamo/app/build/intermediates/dex/debug/mergeDexDebug/out
 0.path=classes.dex
