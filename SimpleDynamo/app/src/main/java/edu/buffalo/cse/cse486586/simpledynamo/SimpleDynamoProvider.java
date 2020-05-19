@@ -65,15 +65,17 @@ public class SimpleDynamoProvider extends ContentProvider {
 	ArrayList<Integer> REMOTE_PORTS = new ArrayList<Integer>(Arrays.asList(11108,11112,11116,11120,11124));
 	ArrayList<Integer> portsSortedList = new ArrayList<Integer>();
 	int myPortpos = 0;
+	Date minDate;
+	SimpleDateFormat formatter = new SimpleDateFormat("MM-dd-HH-mm-ss");
 
-	ReadWriteLock lock = new ReentrantReadWriteLock();
-	Lock writeLock = lock.writeLock();
-	Lock readLock = lock.readLock();
+//	ReadWriteLock lock = new ReentrantReadWriteLock();
+//	Lock writeLock = lock.writeLock();
+//	Lock readLock = lock.readLock();
 
 	@Override
-	public int delete(Uri uri, String selection, String[] selectionArgs) {
+	public synchronized int delete(Uri uri, String selection, String[] selectionArgs) {
 		// TODO Auto-generated method stub
-		writeLock.lock();
+//		writeLock.lock();
 		String contents = "";
 		try {
 
@@ -112,7 +114,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 
 		}catch (Exception e){
 		}
-		writeLock.unlock();
+//		writeLock.unlock();
 		return 0;
 	}
 
@@ -131,72 +133,31 @@ public class SimpleDynamoProvider extends ContentProvider {
 	}
 
 	@Override
-	public Uri insert(Uri uri, ContentValues values) {
+	public synchronized Uri insert(Uri uri, ContentValues values) {
 
 		if(values.containsKey("fetchAll")){
 			String dir =  values.get("fetchAll").toString();
 
 			String msg = values.get("value").toString();
 			String msgs[] = msg.split(":");
-			writeLock.lock();
-			for(int i=1;i<msgs.length;i = i+2){
+//			writeLock.lock();
+			for(int i=1;i<msgs.length;i = i+2) {
 				String key = msgs[i];
-				int now = 0;
-				try{
+				try {
 					String filename = key + ".txt";
-					String val = msgs[i+1];
-					now = Integer.parseInt(val.split(",")[1]);
-					try{
-						String contents = "";
+					String val = msgs[i + 1];
+					File mydir = context.getDir(dir, Context.MODE_PRIVATE);
+					File file = new File(mydir, filename);
+					file.createNewFile();
+					FileOutputStream fos = new FileOutputStream(file);
+					fos.write(val.getBytes());
+					fos.close();
 
-						File mydir = context.getDir(dir, Context.MODE_PRIVATE);
-
-						File file = new File(mydir,filename);
-						FileInputStream fis = new FileInputStream(file);
-
-						InputStreamReader inputStreamReader =
-								new InputStreamReader(fis, StandardCharsets.UTF_8);
-
-						BufferedReader reader = new BufferedReader(inputStreamReader);
-						String line = reader.readLine();
-						while (line != null) {
-							contents = contents + line;
-							line = reader.readLine();
-						}
-						int old=0;
-						if(contents.contains(",")){
-							old= Integer.parseInt(contents.split(",")[1]);
-						}
-
-						if (now>=old){
-//							File mydir = context.getDir(dir, Context.MODE_PRIVATE);
-//							File file = new File(mydir, filename);
-							file.createNewFile();
-							FileOutputStream fos = new FileOutputStream(file);
-							fos.write(val.getBytes());
-							fos.close();
-						}
-
-						Log.i("initial insert"," old:"+contents+": new:"+val);
-
-					}catch (FileNotFoundException e){
-
-						File mydir = context.getDir(dir, Context.MODE_PRIVATE);
-						File file = new File(mydir, filename);
-						file.createNewFile();
-						FileOutputStream fos = new FileOutputStream(file);
-						fos.write(val.getBytes());
-						fos.close();
-
-
-					}
-
-				} catch (Exception e) {
-					e.printStackTrace();
-					Log.i("file", "can not write to file");
+				} catch (IOException ee) {
+					ee.printStackTrace();
 				}
 			}
-			writeLock.unlock();
+//			writeLock.unlock();
 		}
 		else {
 
@@ -220,19 +181,17 @@ public class SimpleDynamoProvider extends ContentProvider {
 					new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR, "replication", values.get("key").toString(), values.get("value").toString(),Integer.toString(myPort));
 				}
 
-				writeLock.lock();
+//				writeLock.lock();
 
 				Log.i("inserted "+replication, values.get("key").toString());
 				String filename = values.get("key").toString() + ".txt";
 				String msg = values.get("value").toString();
 
-				if(msg.contains(":")){
-					int count = Integer.parseInt(msg.split(":")[1]);
+				if(msg.contains(",")){
 					String original = msg.split(",")[0];
-					count++;
-					msg = original+","+Integer.toString(count);
+					msg = original+","+getDate();
 				}else{
-					msg = msg+",1";
+					msg = msg+","+getDate();
 				}
 
 				File mydir = context.getDir(dir, Context.MODE_PRIVATE);
@@ -242,7 +201,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 				fos.write(msg.getBytes());
 				fos.close();
 
-				writeLock.unlock();
+//				writeLock.unlock();
 
 			} catch (Exception e) {
 				e.printStackTrace();
@@ -255,6 +214,11 @@ public class SimpleDynamoProvider extends ContentProvider {
 		return uri;
 	}
 
+	public String getDate(){
+		Date date = new Date();
+		return formatter.format(date);
+	}
+
 	@Override
 	public boolean onCreate() {
 		// TODO Auto-generated method stub
@@ -265,25 +229,24 @@ public class SimpleDynamoProvider extends ContentProvider {
 
 
 		String sDate1="01-01-01-01-01";
-		Date date1= null;
+		Date old= null;
 		try {
-			date1 = new SimpleDateFormat("MM-dd-HH-mm-ss").parse(sDate1);
+			old = formatter.parse(sDate1);
 		} catch (ParseException e) {
 			e.printStackTrace();
 		}
-		System.out.println(sDate1+"\t"+date1);
+		System.out.println(sDate1+"\t"+old);
 
-		SimpleDateFormat formatter = new SimpleDateFormat("MM-dd-HH-mm-ss");
 		Date date = new Date();
-
+		minDate = old;
 		System.out.println("datenow "+formatter.format(date));
-		System.out.println("datenow past "+formatter.format(date1));
+		System.out.println("datenow past "+formatter.format(old));
 
 
-		if(date.after(date1)){
+		if(date.after(old)){
 			System.out.println("datenow "+"fine");
 		}
-		if(date1.after(date)){
+		if(old.after(date)){
 			System.out.println("datenow "+"bad");
 		}
 		context = this.getContext();
@@ -471,7 +434,13 @@ public class SimpleDynamoProvider extends ContentProvider {
 
 	public synchronized Cursor fetchFile(String selection) {
 
-		readLock.lock();
+//		try {
+//			Thread.sleep(100);
+//		} catch (InterruptedException e) {
+//			e.printStackTrace();
+//		}
+
+//		readLock.lock();
 		MatrixCursor cursor = new MatrixCursor(new String[]{"key","value"});
 
 		Log.i("query",selection);
@@ -502,14 +471,14 @@ public class SimpleDynamoProvider extends ContentProvider {
 					.add("value", contents);
 
 		}catch (FileNotFoundException e){
-			readLock.unlock();
+//			readLock.unlock();
 			return null;
 		}
 		catch (Exception e){
 			e.printStackTrace();
 		}
 
-		readLock.unlock();
+//		readLock.unlock();
 		return cursor;
 
 
@@ -597,9 +566,6 @@ public class SimpleDynamoProvider extends ContentProvider {
 			if (files.length == 0) {
 				continue;
 			}
-
-//		String[] filenames = context.fileList();
-//		if(filenames.length == 0){return null;}
 			String contents = "";
 			for (File file : files) {
 				StringBuilder stringBuilder = new StringBuilder();
@@ -777,10 +743,10 @@ public class SimpleDynamoProvider extends ContentProvider {
 					String value="initial";
 
 					try {
-						int max = 0;
+						Date max  = minDate;
 						for(int i=0;i<3;i++){
 							try{
-								int now=0;
+								Date now;
 //								if(targetPort==myPort){continue;}
 								Log.i("finalcheck",key);
 								clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), targetPort);
@@ -795,8 +761,8 @@ public class SimpleDynamoProvider extends ContentProvider {
 								if(res!=null && !res.contains("empty") && !res.contains("null")){
 
 									Log.i("finalcheck","sourceport "+Integer.toString(targetPort)+":key "+key+":value "+value);
-									now = Integer.parseInt(res.split(",")[1]);
-									if(now>max){
+									now = formatter.parse(res.split(",")[1]);
+									if(now.after(max)){
 										value = res.split(",")[0];
 										max = now;
 									}
