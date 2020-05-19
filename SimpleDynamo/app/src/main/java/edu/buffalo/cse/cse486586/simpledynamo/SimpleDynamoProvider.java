@@ -141,10 +141,13 @@ public class SimpleDynamoProvider extends ContentProvider {
 					String val = msgs[i+1];
 					now = Integer.parseInt(val.split(",")[1]);
 					try{
-						String contents = "";
-						FileInputStream fis;
+                        int targetport = findMatch(key);
+                        String dir = Integer.toString(targetport);
+                        File mydir = context.getDir(dir, Context.MODE_PRIVATE); //Creating an internal dir;
 
-						fis = context.openFileInput(filename);
+						String contents = "";
+                        File file = new File(mydir, filename);
+                        FileInputStream fis = new FileInputStream(file);
 						InputStreamReader inputStreamReader =
 								new InputStreamReader(fis, StandardCharsets.UTF_8);
 
@@ -160,20 +163,23 @@ public class SimpleDynamoProvider extends ContentProvider {
 						}
 
 						if (now>=old){
-							File file = new File(context.getFilesDir(), filename);
-
-							FileOutputStream fos = context.openFileOutput(filename, Context.MODE_PRIVATE);
+                            FileOutputStream fos = new FileOutputStream(file);
 							fos.write(val.getBytes());
 							fos.close();
 						}
 
 						Log.i("initial insert"," old:"+contents+": new:"+val);
 
-					}catch (FileNotFoundException e){
+					}
+					catch (FileNotFoundException e){
 
-						File file = new File(context.getFilesDir(), filename);
+					    int targetport = findMatch(key);
+					    String dir = Integer.toString(targetport);
+                        File mydir = context.getDir(dir, Context.MODE_PRIVATE); //Creating an internal dir;
 
-						FileOutputStream fos = context.openFileOutput(filename, Context.MODE_PRIVATE);
+                        File file = new File(mydir, filename);
+
+                        FileOutputStream fos = new FileOutputStream(file);
 						fos.write(val.getBytes());
 						fos.close();
 
@@ -189,12 +195,13 @@ public class SimpleDynamoProvider extends ContentProvider {
 		}
 		else {
 
-
+            String dir = Integer.toString(myPort);
 			boolean replication = true;
 			try {
 
 				if (values.containsKey("replication")) {
 					replication = false;
+                    dir = values.get("replication").toString();
 				}else if (values.containsKey("store")) {
 					replication = false;
 				}
@@ -222,14 +229,15 @@ public class SimpleDynamoProvider extends ContentProvider {
 				}else{
 					msg = msg+",1";
 				}
+				Log.i("dir",dir + " "+filename);
 
-				File file = new File(context.getFilesDir(), filename);
-
-				FileOutputStream fos = context.openFileOutput(filename, Context.MODE_PRIVATE);
+				File mydir = context.getDir(dir, Context.MODE_PRIVATE);
+				File file = new File(mydir, filename);
+				file.createNewFile();
+				FileOutputStream fos = new FileOutputStream(file);
 				fos.write(msg.getBytes());
 				fos.close();
-
-                writeLock.unlock();
+				writeLock.unlock();
 
 			} catch (Exception e) {
 				e.printStackTrace();
@@ -460,15 +468,15 @@ public class SimpleDynamoProvider extends ContentProvider {
 
 	    readLock.lock();
         MatrixCursor cursor = new MatrixCursor(new String[]{"key","value"});
-
+        File mydir = context.getDir(Integer.toString(myPort), Context.MODE_PRIVATE);
 		Log.i("query",selection);
 
 		String contents = "";
 		try {
-			String filename = selection + ".txt";
-			FileInputStream fis;
 
-			fis = context.openFileInput(filename);
+			String filename = selection + ".txt";
+            File file = new File(mydir, filename);
+			FileInputStream fis = new FileInputStream(file);
 			InputStreamReader inputStreamReader =
 					new InputStreamReader(fis, StandardCharsets.UTF_8);
 
@@ -569,47 +577,47 @@ public class SimpleDynamoProvider extends ContentProvider {
 		return globalCursor;
 	}
 	public MatrixCursor fetchLocal(boolean version){
-
 		MatrixCursor cursor = new MatrixCursor(new String[]{"key","value"});
 
+		for(int port:REMOTE_PORTS) {
+			File mydir = context.getDir(Integer.toString(port), Context.MODE_PRIVATE);
+			File[] files = mydir.listFiles();
+			Log.i("fetchLocal",Integer.toString(port)+" "+Integer.toString(files.length));
+			if (files.length == 0) {
+				continue;
+			}
+			String contents = "";
+			for (File file : files) {
+				StringBuilder stringBuilder = new StringBuilder();
 
-		String[] filenames = context.fileList();
-		if(filenames.length == 0){return null;}
-		String contents = "";
-		for(String filename : filenames) {
-			StringBuilder stringBuilder = new StringBuilder();
+				String selection;
+				selection = file.getName().split(".txt")[0];
+				try {
+					FileInputStream fis = new FileInputStream(file);
+					InputStreamReader inputStreamReader =
+							new InputStreamReader(fis, StandardCharsets.UTF_8);
+					BufferedReader reader = new BufferedReader(inputStreamReader);
+					String line = reader.readLine();
+					while (line != null) {
+						stringBuilder.append(line);
+						line = reader.readLine();
+					}
 
-			String selection;
-			selection = filename.split(".txt")[0];
-			try {
-				FileInputStream fis;
-				fis = context.openFileInput(filename);
-				InputStreamReader inputStreamReader =
-						new InputStreamReader(fis, StandardCharsets.UTF_8);
-
-				BufferedReader reader = new BufferedReader(inputStreamReader);
-				String line = reader.readLine();
-				while (line != null) {
-					stringBuilder.append(line);
-					line = reader.readLine();
+				} catch (Exception e) {
+					e.printStackTrace();
+				} finally {
+					contents = stringBuilder.toString();
 				}
-
-			} catch (Exception e) {
-				e.printStackTrace();
-			} finally {
-				contents = stringBuilder.toString();
+				if (contents.contains(",") && !version) {
+					contents = contents.split(",")[0];
+				}
+				cursor.newRow()
+						.add("key", selection)
+						.add("value", contents);
 			}
-//            testPosition(selection);
-			if(contents.contains(",") && !version){
-				contents = contents.split(",")[0];
-			}
-			cursor.newRow()
-					.add("key", selection)
-					.add("value", contents);
-
 		}
 
-		if(contents==""){return null;}
+//		if(contents==""){return null;}
 
 		return cursor;
 
@@ -723,7 +731,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 						clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), targetPort);
 						PrintWriter pw = new PrintWriter(clientSocket.getOutputStream(), true);
 						BufferedReader dis = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
-						pw.println("replication:"+key+":"+value);
+						pw.println("replication:"+key+":"+value+":"+Integer.toString(myPort));
 						String res = dis.readLine();
 						clientSocket.close();
 
@@ -938,10 +946,11 @@ public class SimpleDynamoProvider extends ContentProvider {
 
 							String key = msg.split(":")[1];
 							String value = msg.split(":")[2];
+                            String sourceport = msg.split(":")[3];
 							ContentValues contentValues = new ContentValues();
 							contentValues.put("key",key);
 							contentValues.put("value",value);
-							contentValues.put("replication","replication");
+							contentValues.put("replication",sourceport);
 							ds.println("done");
 //							socket.close();
 							insert(getUri(),contentValues);
