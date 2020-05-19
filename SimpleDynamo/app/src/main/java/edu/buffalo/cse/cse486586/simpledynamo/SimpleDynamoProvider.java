@@ -66,14 +66,14 @@ public class SimpleDynamoProvider extends ContentProvider {
 	ArrayList<Integer> portsSortedList = new ArrayList<Integer>();
 	int myPortpos = 0;
 
-    ReadWriteLock lock = new ReentrantReadWriteLock();
-    Lock writeLock = lock.writeLock();
-    Lock readLock = lock.readLock();
+	ReadWriteLock lock = new ReentrantReadWriteLock();
+	Lock writeLock = lock.writeLock();
+	Lock readLock = lock.readLock();
 
 	@Override
 	public int delete(Uri uri, String selection, String[] selectionArgs) {
 		// TODO Auto-generated method stub
-        writeLock.lock();
+		writeLock.lock();
 		String contents = "";
 		try {
 
@@ -94,8 +94,13 @@ public class SimpleDynamoProvider extends ContentProvider {
 				}
 
 			}else if(selection.contains("direct")){
-				String filename = selection.split(":")[0] + ".txt";
-				context.deleteFile(filename);
+				String msg = selection.split(":")[0];
+				String targetPort = Integer.toString(findMatch(msg));
+				String filename =  msg+ ".txt";
+
+				File mydir = context.getDir(targetPort, Context.MODE_PRIVATE);
+				File file = new File(mydir, filename);
+				file.delete();
 			}
 			else{
 				int targetPort = findMatch(selection);
@@ -107,7 +112,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 
 		}catch (Exception e){
 		}
-        writeLock.unlock();
+		writeLock.unlock();
 		return 0;
 	}
 
@@ -132,7 +137,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 
 			String msg = values.get("value").toString();
 			String msgs[] = msg.split(":");
-            writeLock.lock();
+			writeLock.lock();
 			for(int i=1;i<msgs.length;i = i+2){
 				String key = msgs[i];
 				int now = 0;
@@ -141,13 +146,10 @@ public class SimpleDynamoProvider extends ContentProvider {
 					String val = msgs[i+1];
 					now = Integer.parseInt(val.split(",")[1]);
 					try{
-                        int targetport = findMatch(key);
-                        String dir = Integer.toString(targetport);
-                        File mydir = context.getDir(dir, Context.MODE_PRIVATE); //Creating an internal dir;
-
 						String contents = "";
-                        File file = new File(mydir, filename);
-                        FileInputStream fis = new FileInputStream(file);
+						FileInputStream fis;
+
+						fis = context.openFileInput(filename);
 						InputStreamReader inputStreamReader =
 								new InputStreamReader(fis, StandardCharsets.UTF_8);
 
@@ -159,27 +161,24 @@ public class SimpleDynamoProvider extends ContentProvider {
 						}
 						int old=0;
 						if(contents.contains(",")){
-							 old= Integer.parseInt(contents.split(",")[1]);
+							old= Integer.parseInt(contents.split(",")[1]);
 						}
 
 						if (now>=old){
-                            FileOutputStream fos = new FileOutputStream(file);
+							File file = new File(context.getFilesDir(), filename);
+
+							FileOutputStream fos = context.openFileOutput(filename, Context.MODE_PRIVATE);
 							fos.write(val.getBytes());
 							fos.close();
 						}
 
 						Log.i("initial insert"," old:"+contents+": new:"+val);
 
-					}
-					catch (FileNotFoundException e){
+					}catch (FileNotFoundException e){
 
-					    int targetport = findMatch(key);
-					    String dir = Integer.toString(targetport);
-                        File mydir = context.getDir(dir, Context.MODE_PRIVATE); //Creating an internal dir;
+						File file = new File(context.getFilesDir(), filename);
 
-                        File file = new File(mydir, filename);
-
-                        FileOutputStream fos = new FileOutputStream(file);
+						FileOutputStream fos = context.openFileOutput(filename, Context.MODE_PRIVATE);
 						fos.write(val.getBytes());
 						fos.close();
 
@@ -195,13 +194,13 @@ public class SimpleDynamoProvider extends ContentProvider {
 		}
 		else {
 
-            String dir = Integer.toString(myPort);
+			String dir = Integer.toString(myPort);
 			boolean replication = true;
 			try {
 
 				if (values.containsKey("replication")) {
 					replication = false;
-                    dir = values.get("replication").toString();
+					dir = values.get("replication").toString();
 				}else if (values.containsKey("store")) {
 					replication = false;
 				}
@@ -215,7 +214,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 					new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR, "replication", values.get("key").toString(), values.get("value").toString(),Integer.toString(myPort));
 				}
 
-                writeLock.lock();
+				writeLock.lock();
 
 				Log.i("inserted "+replication, values.get("key").toString());
 				String filename = values.get("key").toString() + ".txt";
@@ -229,7 +228,6 @@ public class SimpleDynamoProvider extends ContentProvider {
 				}else{
 					msg = msg+",1";
 				}
-				Log.i("dir",dir + " "+filename);
 
 				File mydir = context.getDir(dir, Context.MODE_PRIVATE);
 				File file = new File(mydir, filename);
@@ -237,6 +235,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 				FileOutputStream fos = new FileOutputStream(file);
 				fos.write(msg.getBytes());
 				fos.close();
+
 				writeLock.unlock();
 
 			} catch (Exception e) {
@@ -254,9 +253,9 @@ public class SimpleDynamoProvider extends ContentProvider {
 	public boolean onCreate() {
 		// TODO Auto-generated method stub
 
-        ReadWriteLock lock = new ReentrantReadWriteLock();
-        Lock writeLock = lock.writeLock();
-        Lock readLock = lock.readLock();
+		ReadWriteLock lock = new ReentrantReadWriteLock();
+		Lock writeLock = lock.writeLock();
+		Lock readLock = lock.readLock();
 
 
 		String sDate1="01-01-01-01-01";
@@ -466,17 +465,21 @@ public class SimpleDynamoProvider extends ContentProvider {
 
 	public synchronized Cursor fetchFile(String selection) {
 
-	    readLock.lock();
-        MatrixCursor cursor = new MatrixCursor(new String[]{"key","value"});
-        File mydir = context.getDir(Integer.toString(myPort), Context.MODE_PRIVATE);
+		readLock.lock();
+		MatrixCursor cursor = new MatrixCursor(new String[]{"key","value"});
+
 		Log.i("query",selection);
+
+		int pport = findMatch(selection);
+		File mydir = context.getDir(Integer.toString(pport), Context.MODE_PRIVATE);
 
 		String contents = "";
 		try {
-
 			String filename = selection + ".txt";
-            File file = new File(mydir, filename);
+			File file = new File(mydir,filename);
 			FileInputStream fis = new FileInputStream(file);
+
+//			fis = context.openFileInput(filename);
 			InputStreamReader inputStreamReader =
 					new InputStreamReader(fis, StandardCharsets.UTF_8);
 
@@ -493,14 +496,14 @@ public class SimpleDynamoProvider extends ContentProvider {
 					.add("value", contents);
 
 		}catch (FileNotFoundException e){
-            readLock.unlock();
+			readLock.unlock();
 			return null;
 		}
 		catch (Exception e){
 			e.printStackTrace();
 		}
 
-        readLock.unlock();
+		readLock.unlock();
 		return cursor;
 
 
@@ -518,27 +521,27 @@ public class SimpleDynamoProvider extends ContentProvider {
 
 		String contents = "";
 
-			try {
-				int port = findMatch(selection);
-				Log.i("port",selection+":"+Integer.toString(port));
-				String value= new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR,"single",selection,Integer.toString(port)).get();
-				Log.i("finalcheck",selection+":targetPort:"+Integer.toString(port)+" :myPort:"+Integer.toString(myPort)+" :R1:"+Integer.toString(getRightPort(port))+" :R2:"+Integer.toString(getRightPort(getRightPort(port))));
+		try {
+			int port = findMatch(selection);
+			Log.i("port",selection+":"+Integer.toString(port));
+			String value= new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR,"single",selection,Integer.toString(port)).get();
+			Log.i("finalcheck",selection+":targetPort:"+Integer.toString(port)+" :myPort:"+Integer.toString(myPort)+" :R1:"+Integer.toString(getRightPort(port))+" :R2:"+Integer.toString(getRightPort(getRightPort(port))));
 
 //				if(value.contains("initial")){
 //					return fetch(selection);
 //				}
-				if(value.contains(":")){
-					value = value.split(":")[0];
-				}
-
-				cursor.newRow()
-						.add("key", selection)
-						.add("value", value);
-			} catch (InterruptedException ex) {
-				ex.printStackTrace();
-			} catch (ExecutionException ex) {
-				ex.printStackTrace();
+			if(value.contains(":")){
+				value = value.split(":")[0];
 			}
+
+			cursor.newRow()
+					.add("key", selection)
+					.add("value", value);
+		} catch (InterruptedException ex) {
+			ex.printStackTrace();
+		} catch (ExecutionException ex) {
+			ex.printStackTrace();
+		}
 
 
 		catch (Exception e){
@@ -577,15 +580,20 @@ public class SimpleDynamoProvider extends ContentProvider {
 		return globalCursor;
 	}
 	public MatrixCursor fetchLocal(boolean version){
+
 		MatrixCursor cursor = new MatrixCursor(new String[]{"key","value"});
 
-		for(int port:REMOTE_PORTS) {
-			File mydir = context.getDir(Integer.toString(port), Context.MODE_PRIVATE);
+		for(int pport:REMOTE_PORTS) {
+
+			File mydir = context.getDir(Integer.toString(pport), Context.MODE_PRIVATE);
 			File[] files = mydir.listFiles();
-			Log.i("fetchLocal",Integer.toString(port)+" "+Integer.toString(files.length));
+			Log.i("fetchLocal", Integer.toString(myPort) + " " + Integer.toString(files.length));
 			if (files.length == 0) {
 				continue;
 			}
+
+//		String[] filenames = context.fileList();
+//		if(filenames.length == 0){return null;}
 			String contents = "";
 			for (File file : files) {
 				StringBuilder stringBuilder = new StringBuilder();
@@ -596,6 +604,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 					FileInputStream fis = new FileInputStream(file);
 					InputStreamReader inputStreamReader =
 							new InputStreamReader(fis, StandardCharsets.UTF_8);
+
 					BufferedReader reader = new BufferedReader(inputStreamReader);
 					String line = reader.readLine();
 					while (line != null) {
@@ -608,15 +617,17 @@ public class SimpleDynamoProvider extends ContentProvider {
 				} finally {
 					contents = stringBuilder.toString();
 				}
+//            testPosition(selection);
 				if (contents.contains(",") && !version) {
 					contents = contents.split(",")[0];
 				}
 				cursor.newRow()
 						.add("key", selection)
 						.add("value", contents);
-			}
-		}
 
+			}
+
+		}
 //		if(contents==""){return null;}
 
 		return cursor;
@@ -715,8 +726,6 @@ public class SimpleDynamoProvider extends ContentProvider {
 					Log.i("clientException","socket timeout "+targetPort);
 
 				}
-
-
 			}
 			else  if(msgs[0].contains("replication")){
 				String key = msgs[1];
@@ -731,7 +740,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 						clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), targetPort);
 						PrintWriter pw = new PrintWriter(clientSocket.getOutputStream(), true);
 						BufferedReader dis = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
-						pw.println("replication:"+key+":"+value+":"+Integer.toString(myPort));
+						pw.println("replication:"+key+":"+value);
 						String res = dis.readLine();
 						clientSocket.close();
 
@@ -946,12 +955,12 @@ public class SimpleDynamoProvider extends ContentProvider {
 
 							String key = msg.split(":")[1];
 							String value = msg.split(":")[2];
-                            String sourceport = msg.split(":")[3];
+							ds.println("done");
 							ContentValues contentValues = new ContentValues();
 							contentValues.put("key",key);
 							contentValues.put("value",value);
-							contentValues.put("replication",sourceport);
-							ds.println("done");
+							contentValues.put("replication",Integer.toString(findMatch(key)));
+
 //							socket.close();
 							insert(getUri(),contentValues);
 //							socket.close();
@@ -960,7 +969,6 @@ public class SimpleDynamoProvider extends ContentProvider {
 							String key = msg.split(":")[1];
 //							Log.i("single server",key);
 							MatrixCursor cursor = (MatrixCursor) fetchFile(key);
-
 							if(cursor==null){
 								ds.println("empty");
 							}else{
