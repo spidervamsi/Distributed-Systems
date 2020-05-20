@@ -973,7 +973,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 									String value = cursor.getString(cursor.getColumnIndex("value"));
 
 //									if(continueOrNot(key,t0,p0) || continueOrNot(key,t1,p1) || continueOrNot(key,t2,p2)){
-										msgToSend = msgToSend + ":" + key + ":" + value;
+									msgToSend = msgToSend + ":" + key + ":" + value;
 //									}
 								} while (cursor.moveToNext());
 
