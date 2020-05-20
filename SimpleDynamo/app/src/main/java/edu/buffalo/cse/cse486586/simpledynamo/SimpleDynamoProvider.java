@@ -235,13 +235,9 @@ public class SimpleDynamoProvider extends ContentProvider {
 		} catch (ParseException e) {
 			e.printStackTrace();
 		}
-		System.out.println(sDate1+"\t"+old);
 
 		Date date = new Date();
 		minDate = old;
-		System.out.println("datenow "+formatter.format(date));
-		System.out.println("datenow past "+formatter.format(old));
-
 
 		if(date.after(old)){
 			System.out.println("datenow "+"fine");
@@ -465,7 +461,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 				line = reader.readLine();
 			}
 
-			Log.i("fileContents fetchfile",contents);
+//			Log.i("fileContents fetchfile",contents);
 			cursor.newRow()
 					.add("key", selection)
 					.add("value", contents);
@@ -530,7 +526,6 @@ public class SimpleDynamoProvider extends ContentProvider {
 
 	public MatrixCursor fetchAll(){
 
-		Log.i("connectback","fetchAll function");
 
 		MatrixCursor globalCursor= new MatrixCursor(new String[]{"key","value"});
 		String msg="";
@@ -562,7 +557,6 @@ public class SimpleDynamoProvider extends ContentProvider {
 
 			File mydir = context.getDir(Integer.toString(pport), Context.MODE_PRIVATE);
 			File[] files = mydir.listFiles();
-			Log.i("fetchLocal", Integer.toString(myPort) + " " + Integer.toString(files.length));
 			if (files.length == 0) {
 				continue;
 			}
@@ -692,14 +686,14 @@ public class SimpleDynamoProvider extends ContentProvider {
 
 					for(int repPort:targetPorts){
 						try {
-							Log.i("trying replication","dis:"+key+":repPort:"+repPort);
+//							Log.i("trying replication","dis:"+key+":repPort:"+repPort);
 							clientSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), repPort);
 							pw = new PrintWriter(clientSocket.getOutputStream(), true);
 							dis = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
 							pw.println("replication:"+key+":"+value);
 							res = dis.readLine();
 							clientSocket.close();
-							Log.i("trying status","dis:"+key+":repPort:"+repPort);
+//							Log.i("trying status","dis:"+key+":repPort:"+repPort);
 						} catch (Exception e) {
 							Log.i("replication error",e.getMessage());
 						}
@@ -756,24 +750,17 @@ public class SimpleDynamoProvider extends ContentProvider {
 //							clientSocket.setSoTimeout(200);
 								String res = dis.readLine();
 
-								Log.i("finalcheck","res "+res);
+//								Log.i("finalcheck","res "+res);
 								clientSocket.close();
 								if(res!=null && !res.contains("empty") && !res.contains("null")){
-
-									Log.i("finalcheck","sourceport "+Integer.toString(targetPort)+":key "+key+":value "+value);
+//									Log.i("finalcheck","sourceport "+Integer.toString(targetPort)+":key "+key+":value "+res);
 									now = formatter.parse(res.split(",")[1]);
-									if(now.after(max)){
+									if(!max.after(now)){
+//										Log.i("finalcheck",key+" : value : "+value+":old:"+formatter.format(max)+":new:"+formatter.format(now));
 										value = res.split(",")[0];
 										max = now;
 									}
-
-									Log.i("finalcheck",key+":break:"+"value"+value+":"+Integer.toString(targetPort));
-
-//								break;
 								}
-//							try {
-//								Thread.sleep(250);
-//							}catch (Exception ee){}
 
 							}catch (Exception exc){
 								Log.i("exc","Exception +"+exc.getMessage());
@@ -957,7 +944,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 								ds.println("empty");
 							}else{
 								cursor.moveToFirst();
-								String key1 = cursor.getString(cursor.getColumnIndex("key"));
+//								String key1 = cursor.getString(cursor.getColumnIndex("key"));
 								String value = cursor.getString(cursor.getColumnIndex("value"));
 								ds.println(value);
 							}
